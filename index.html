@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>비밀 연구소: 화학식 방탈출 & 조립기 & 샌드박스</title>
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Noto Sans KR', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: {
+                        neon: { blue: '#00f3ff', green: '#39ff14', red: '#ff003c', yellow: '#ffe600', purple: '#b537f2' },
+                        dark: { 900: '#0a0a0f', 800: '#12121c', 700: '#1a1a2e' }
+                    },
+                    animation: { 'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite', 'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both', 'scan': 'scan 2s linear infinite' },
+                    keyframes: {
+                        shake: { '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' }, '20%, 80%': { transform: 'translate3d(2px, 0, 0)' }, '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' }, '40%, 60%': { transform: 'translate3d(4px, 0, 0)' } },
+                        scan: { '0%': { transform: 'translateY(-100%)' }, '100%': { transform: 'translateY(100%)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { background-color: #0a0a0f; color: #e2e8f0; overflow-x: hidden; overflow-y: auto; -webkit-user-select: none; user-select: none; touch-action: pan-y; }
+        .glass-panel { background: rgba(26, 26, 46, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0, 243, 255, 0.2); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); }
+        .text-glow-blue { text-shadow: 0 0 10px rgba(0, 243, 255, 0.7), 0 0 20px rgba(0, 243, 255, 0.5); }
+        .text-glow-red { text-shadow: 0 0 10px rgba(255, 0, 60, 0.7), 0 0 20px rgba(255, 0, 60, 0.5); }
+        .text-glow-green { text-shadow: 0 0 10px rgba(57, 255, 20, 0.7), 0 0 20px rgba(57, 255, 20, 0.5); }
+        .text-glow-purple { text-shadow: 0 0 10px rgba(181, 55, 242, 0.7), 0 0 20px rgba(181, 55, 242, 0.5); }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0a0a0f; }
+        ::-webkit-scrollbar-thumb { background: #1a1a2e; border-radius: 4px; border: 1px solid #00f3ff; }
+        ::-webkit-scrollbar-thumb:hover { background: #00f3ff; }
+        input[type="text"], textarea { -webkit-user-select: text; user-select: text; }
+
+        .canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #12121c; overflow: hidden; }
+        .full-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        
+        /* Pin Pad Styles */
+        .pin-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(0,243,255,0.3); border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: #fff; transition: all 0.1s; }
+        .pin-btn:active { background: rgba(0,243,255,0.3); transform: scale(0.9); }
+        .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #00f3ff; transition: all 0.2s; }
+        .pin-dot.filled { background: #00f3ff; box-shadow: 0 0 10px #00f3ff; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ==========================================
+        // 0. Sound & Haptic Manager (Vanilla JS)
+        // ==========================================
+        class AudioManager {
+            constructor() { this.ctx = null; }
+            init() { 
+                if(!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if(AudioContext) this.ctx = new AudioContext();
+                }
+            }
+            playTone(freq, type, duration, vol=0.1) {
+                if(!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+                    osc.type = type; osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(); osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+            success() { this.init(); this.playTone(600, 'sine', 0.1); setTimeout(()=>this.playTone(800, 'sine', 0.15), 100); this.vibrate(50); }
+            error() { this.init(); this.playTone(300, 'sawtooth', 0.2); this.vibrate([50,50,50]); }
+            unlock() { this.init(); this.playTone(500, 'square', 0.1); setTimeout(()=>this.playTone(1000, 'square', 0.2), 100); this.vibrate([100,50,100]); }
+            click() { this.init(); this.playTone(800, 'sine', 0.05, 0.05); }
+            vibrate(pattern) { if(navigator.vibrate) { try { navigator.vibrate(pattern); }catch(e){} } }
+        }
+        const audio = new AudioManager();
+
+        // ==========================================
+        // 1. 전역 설정 및 데이터
+        // ==========================================
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxM-HboJoZ0V-S9XUmGQw7QyJxuXXEfJICXT3_3LbesNRd5Ywjaq2SedUgv1md013vN/exec"; 
+
+        const ESCAPE_ROOM_LEVELS = [
+            { id: 1, type: 'consonant', question: "온실가스의 주범, 생명체의 호흡 결과 물질은?", hint: "ㅇㅅㅎㅌㅅ", answer: ["이산화탄소", "이산화 탄소"], moleculeType: 'CO2', color: 'text-neon-red', borderColor: 'border-neon-red' },
+            { id: 2, type: 'formula', question: "지구 표면의 약 70%, '물'의 화학식은?", hint: "수소2 산소1", answer: ["H2O", "h2o"], moleculeType: 'H2O', color: 'text-neon-blue', borderColor: 'border-neon-blue' },
+            { id: 3, type: 'consonant', question: "천연가스 주성분, 강력한 온실가스인 이것은?", hint: "ㅁㅌㅇ", answer: ["메테인", "메탄"], moleculeType: 'CH4', color: 'text-neon-yellow', borderColor: 'border-neon-yellow' },
+            { id: 4, type: 'formula', question: "대기의 약 78%, 과자 충전재 가스의 화학식은?", hint: "질소2", answer: ["N2", "n2"], moleculeType: 'N2', color: 'text-neon-green', borderColor: 'border-neon-green' }
+        ];
+
+        const QUIZ_POOL = [
+            { q: "물의 화학식은 H2O이다.", a: true, explain: "물 분자는 H 2개와 O 1개로 이뤄짐." },
+            { q: "이산화 탄소는 C 2개와 O 1개다.", a: false, explain: "CO2이므로 C 1개, O 2개입니다." },
+            { q: "원자는 물질을 구성하는 기본 입자이다.", a: true, explain: "기본 입자는 원자입니다." },
+            { q: "분자는 물질의 성질을 나타내는 가장 작은 입자이다.", a: true, explain: "성질을 지닌 독립 입자가 분자입니다." },
+            { q: "메테인의 화학식은 NH3이다.", a: false, explain: "메테인은 CH4, NH3는 암모니아입니다." },
+            { q: "같은 원자로 이뤄져도 배열이 다르면 다른 물질이다.", a: true, explain: "다이아몬드와 흑연의 예가 있습니다." },
+            { q: "원소 기호 오른쪽 아래 숫자는 분자 총 개수다.", a: false, explain: "해당 원자의 개수를 의미합니다." },
+            { q: "산소 분자는 O2로 나타낸다.", a: true, explain: "산소 원자 2개가 결합합니다." },
+            { q: "비활성 기체는 원자 1개가 곧 분자이다.", a: true, explain: "단원자 분자라고 부릅니다." },
+            { q: "모든 분자는 두 개 이상의 원자로 이루어져 있다.", a: false, explain: "단원자 분자도 존재합니다." }
+        ];
+
+        const FORMULA_MISSIONS = [
+            { title: "물 (수소 2개, 산소 1개)", slots: [{ type: 'element', expected: "H" }, { type: 'number', expected: "2" }, { type: 'element', expected: "O" }] },
+            { title: "이산화 탄소 (탄소 1개, 산소 2개)", slots: [{ type: 'element', expected: "C" }, { type: 'element', expected: "O" }, { type: 'number', expected: "2" }] },
+            { title: "암모니아 (질소 1개, 수소 3개)", slots: [{ type: 'element', expected: "N" }, { type: 'element', expected: "H" }, { type: 'number', expected: "3" }] },
+            { title: "염화 나트륨 (나트륨 1, 염소 1)", slots: [{ type: 'element', expected: "Na" }, { type: 'element', expected: "Cl" }] },
+            { title: "메테인 (탄소 1개, 수소 4개)", slots: [{ type: 'element', expected: "C" }, { type: 'element', expected: "H" }, { type: 'number', expected: "4" }] },
+            { title: "과산화수소 (수소 2, 산소 2)", slots: [{ type: 'element', expected: "H" }, { type: 'number', expected: "2" }, { type: 'element', expected: "O" }, { type: 'number', expected: "2" }] },
+        ];
+
+        // ==========================================
+        // 2. LocalStorage Wrapper
+        // ==========================================
+        const Storage = {
+            save: (key, data) => localStorage.setItem(`chem_${key}`, JSON.stringify(data)),
+            load: (key, defaultData) => {
+                const item = localStorage.getItem(`chem_${key}`);
+                return item ? JSON.parse(item) : defaultData;
+            }
+        };
+
+        // ==========================================
+        // 3. Canvas Engines (Vanilla JS)
+        // ==========================================
+        
+        // --- 3.1 3D 분자 모형 (방탈출 및 샌드박스용 대규모 확장) ---
+        class MoleculeVisualizer {
+            constructor(canvas) {
+                this.canvas = canvas; this.ctx = canvas.getContext('2d');
+                this.width = canvas.width; this.height = canvas.height;
+                this.atoms = []; this.bonds = []; this.angleX = 0; this.angleY = 0;
+                this.isAnimating = false; this.animationFrame = null;
+                this.isDragging = false; this.prevMouse = { x: 0, y: 0 };
+                this.setupEvents();
+            }
+            resize(w, h) { this.width = w; this.height = h; this.canvas.width = w; this.canvas.height = h; }
+            setupEvents() {
+                const start = (e) => { this.isDragging = true; this.prevMouse = { x: e.touches ? e.touches[0].clientX : e.clientX, y: e.touches ? e.touches[0].clientY : e.clientY }; };
+                const drag = (e) => {
+                    if (!this.isDragging) return;
+                    const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY;
+                    this.angleY += (cx - this.prevMouse.x) * 0.01; this.angleX += (cy - this.prevMouse.y) * 0.01;
+                    this.prevMouse = { x: cx, y: cy };
+                };
+                const end = () => { this.isDragging = false; };
+                this.canvas.addEventListener('mousedown', start); this.canvas.addEventListener('mousemove', drag); window.addEventListener('mouseup', end);
+                this.canvas.addEventListener('touchstart', start, {passive: true}); this.canvas.addEventListener('touchmove', drag, {passive: true}); window.addEventListener('touchend', end);
+                this._e = {start, drag, end};
+            }
+            setMolecule(type) {
+                this.atoms = []; this.bonds = []; const scale = Math.min(this.width, this.height) * 0.15;
+                const AP = { 
+                    'C': ['#4b5563', 1.2, 'C'], 'O': ['#ef4444', 1.1, 'O'], 'H': ['#f8fafc', 0.8, 'H'], 'N': ['#3b82f6', 1.1, 'N'],
+                    'Na': ['#8b5cf6', 1.5, 'Na'], 'Mg': ['#10b981', 1.4, 'Mg'], 'Al': ['#94a3b8', 1.3, 'Al'], 'Si': ['#fbbf24', 1.4, 'Si'],
+                    'S':  ['#eab308', 1.2, 'S'], 'Cl': ['#22c55e', 1.2, 'Cl'], 'Cu': ['#d97706', 1.4, 'Cu'], 'K':  ['#a855f7', 1.6, 'K'], 'Mn': ['#ec4899', 1.4, 'Mn']
+                };
+                const a = (x, y, z, e) => { this.atoms.push({ ox: x*scale, oy: y*scale, oz: z*scale, x:0, y:0, z:0, c: AP[e][0], r: AP[e][1]*scale*0.3, s: AP[e][2] }); return this.atoms.length - 1; };
+                const b = (i, j, t=1) => { this.bonds.push({ i, j, t }); };
+
+                // 3D 구조 하드코딩 DB
+                if (type === 'H2O') { const o = a(0,0,0,'O'); b(o, a(0.8,0.6,0,'H')); b(o, a(-0.8,0.6,0,'H')); } 
+                else if (type === 'CO2') { const c = a(0,0,0,'C'); b(c, a(1.2,0,0,'O'), 2); b(c, a(-1.2,0,0,'O'), 2); } 
+                else if (type === 'CH4') { const c = a(0,0,0,'C'); b(c, a(1,1,1,'H')); b(c, a(-1,-1,1,'H')); b(c, a(-1,1,-1,'H')); b(c, a(1,-1,-1,'H')); } 
+                else if (type === 'NH3') { const n = a(0,0,0,'N'); b(n, a(0,1,0.8,'H')); b(n, a(-0.8,1,-0.5,'H')); b(n, a(0.8,1,-0.5,'H')); }
+                else if (type === 'O2') { const o1 = a(0.6,0,0,'O'); b(o1, a(-0.6,0,0,'O'), 2); }
+                else if (type === 'N2') { const n1 = a(0.6,0,0,'N'); b(n1, a(-0.6,0,0,'N'), 3); }
+                else if (type === 'H2O2') { const o1=a(-0.5,0,0,'O'); const o2=a(0.5,0,0,'O'); const h1=a(-1,0.6,0,'H'); const h2=a(1,-0.6,0,'H'); b(o1,o2); b(o1,h1); b(o2,h2); }
+                else if (type === 'NaCl' || type === 'HCl' || type === 'KCl') { const e = type.replace('Cl',''); const a1 = a(-0.6,0,0,e); const a2 = a(0.6,0,0,'Cl'); b(a1, a2); }
+                else if (type === 'MgO' || type === 'CuO' || type === 'CO') { const e = type.replace('O',''); const a1 = a(-0.6,0,0,e); const a2 = a(0.6,0,0,'O'); b(a1, a2, (type==='CO'?3:2)); }
+                else if (type === 'SO2') { const s = a(0,0,0,'S'); b(s, a(-0.8,-0.6,0,'O'), 2); b(s, a(0.8,-0.6,0,'O'), 2); }
+                else if (type === 'H2S') { const s = a(0,0,0,'S'); b(s, a(-0.8,0.6,0,'H')); b(s, a(0.8,0.6,0,'H')); }
+                else if (type === 'Al2O3') { const o1=a(-1.2,0,0,'O'); const al1=a(-0.6,0.5,0,'Al'); const o2=a(0,0,0,'O'); const al2=a(0.6,-0.5,0,'Al'); const o3=a(1.2,0,0,'O'); b(o1,al1,2); b(al1,o2); b(o2,al2); b(al2,o3,2); }
+                else if (type === 'CuSO4') { const s=a(0,0,0,'S'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const cu=a(-1.6,1.6,-1.6,'Cu'); b(s,o1,2); b(s,o2,2); b(s,o3); b(s,o4); b(cu,o3); b(cu,o4); }
+                else if (type === 'KMnO4') { const mn=a(0,0,0,'Mn'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const k=a(-1.6,1.6,-1.6,'K'); b(mn,o1,2); b(mn,o2,2); b(mn,o3,2); b(mn,o4); b(k,o4); }
+                
+                this.angleX = Math.random() * Math.PI; this.angleY = Math.random() * Math.PI;
+            }
+            start() { if (!this.isAnimating) { this.isAnimating = true; this.animate(); } }
+            stop() {
+                this.isAnimating = false; if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+                if (this._e) {
+                    this.canvas.removeEventListener('mousedown', this._e.start); this.canvas.removeEventListener('mousemove', this._e.drag); window.removeEventListener('mouseup', this._e.end);
+                    this.canvas.removeEventListener('touchstart', this._e.start); this.canvas.removeEventListener('touchmove', this._e.drag); window.removeEventListener('touchend', this._e.end);
+                }
+            }
+            animate() {
+                if (!this.isAnimating) return;
+                if (!this.isDragging) { this.angleY += 0.01; this.angleX += 0.005; }
+                this.render(); this.animationFrame = requestAnimationFrame(() => this.animate());
+            }
+            render() {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                const cx = this.width/2; const cy = this.height/2; const cX = Math.cos(this.angleX); const sX = Math.sin(this.angleX); const cY = Math.cos(this.angleY); const sY = Math.sin(this.angleY);
+
+                this.atoms.forEach(at => {
+                    let x1 = at.ox * cY - at.oz * sY; let z1 = at.oz * cY + at.ox * sY;
+                    let y2 = at.oy * cX - z1 * sX; let z2 = z1 * cX + at.oy * sX;
+                    at.x = x1; at.y = y2; at.z = z2;
+                });
+
+                let rBonds = [...this.bonds].map(b => ({ ...b, z: (this.atoms[b.i].z + this.atoms[b.j].z)/2 })).sort((a, b) => a.z - b.z);
+                let rAtoms = [...this.atoms].sort((a, b) => a.z - b.z);
+                const fl = 800;
+
+                rBonds.forEach(bd => {
+                    const a1 = this.atoms[bd.i]; const a2 = this.atoms[bd.j];
+                    const sc1 = fl / (fl - a1.z); const sc2 = fl / (fl - a2.z);
+                    const p1x = cx + a1.x * sc1; const p1y = cy + a1.y * sc1; const p2x = cx + a2.x * sc2; const p2y = cy + a2.y * sc2;
+                    const alpha = Math.max(0.2, Math.min(1, ((a1.z + a2.z)/2 + 300) / 600));
+                    this.ctx.strokeStyle = `rgba(0, 243, 255, ${alpha * 0.8})`; 
+                    
+                    const drawLine = (nx=0, ny=0) => { this.ctx.beginPath(); this.ctx.moveTo(p1x+nx, p1y+ny); this.ctx.lineTo(p2x+nx, p2y+ny); this.ctx.stroke(); };
+                    if (bd.t === 1) { this.ctx.lineWidth = 4*((sc1+sc2)/2); drawLine(); } 
+                    else if (bd.t === 2) {
+                        this.ctx.lineWidth = 2*((sc1+sc2)/2); const dx = p2x - p1x; const dy = p2y - p1y; const len = Math.sqrt(dx*dx+dy*dy); const nx = -dy/len*5; const ny = dx/len*5;
+                        drawLine(nx, ny); drawLine(-nx, -ny);
+                    } else if (bd.t === 3) {
+                         this.ctx.lineWidth = 1.5*((sc1+sc2)/2); const dx = p2x - p1x; const dy = p2y - p1y; const len = Math.sqrt(dx*dx+dy*dy); const nx = -dy/len*8; const ny = dx/len*8;
+                        drawLine(); drawLine(nx, ny); drawLine(-nx, -ny);
+                    }
+                });
+
+                rAtoms.forEach(at => {
+                    const sc = fl / (fl - at.z); const px = cx + at.x * sc; const py = cy + at.y * sc; const r = at.r * sc;
+                    this.ctx.shadowBlur = 20 * sc; this.ctx.shadowColor = at.c;
+                    const grd = this.ctx.createRadialGradient(px-r*0.3, py-r*0.3, r*0.1, px, py, r);
+                    grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.3, at.c); grd.addColorStop(1, '#000000');
+                    this.ctx.beginPath(); this.ctx.arc(px, py, r, 0, Math.PI*2); this.ctx.fillStyle = grd; this.ctx.fill();
+                    this.ctx.shadowBlur = 0; this.ctx.fillStyle = at.c === '#f8fafc' ? '#1e293b' : '#ffffff';
+                    this.ctx.font = `bold ${r*0.8}px 'JetBrains Mono', monospace`; this.ctx.textAlign = 'center'; this.ctx.textBaseline = 'middle'; this.ctx.fillText(at.s, px, py);
+                });
+            }
+        }
+
+        // --- 3.2 2D 조립기 공통 컴포넌트 ---
+        class DraggableCard {
+            constructor(text, type) {
+                this.text = text; this.type = type;
+                this.width = 50; this.height = 70; this.font = '';
+                this.originX = 0; this.originY = 0; this.x = 0; this.y = 0;
+                this.isDragging = false;
+                const hue = Math.floor(Math.random() * 360);
+                this.bgColor = `hsl(${hue}, 40%, 25%)`; this.textColor = '#ffffff';
+                if(this.type === 'number') { this.bgColor = '#1e293b'; this.textColor = '#00f3ff'; }
+            }
+            draw(ctx) {
+                if (this.isDragging) { ctx.shadowColor = 'rgba(0, 243, 255, 0.5)'; ctx.shadowBlur = 15; ctx.shadowOffsetX = 5; ctx.shadowOffsetY = 5; } 
+                else { ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 5; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2; }
+                ctx.fillStyle = this.bgColor; ctx.beginPath(); ctx.roundRect(this.x, this.y, this.width, this.height, 8); ctx.fill();
+                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = this.type === 'number' ? '#00f3ff' : '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.fillStyle = this.textColor; ctx.font = this.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
+            }
+            isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
+            resetPosition() { this.x = this.originX; this.y = this.originY; }
+        }
+
+        class Slot {
+            constructor(type, expected="") {
+                this.type = type; this.expected = expected; this.x = 0; this.y = 0;
+                this.width = 50; this.height = 70; this.placedCard = null;
+            }
+            draw(ctx) {
+                ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(0, 243, 255, 0.4)'; ctx.lineWidth = 2; ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.beginPath(); ctx.roundRect(this.x, this.y, this.width, this.height, 8); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+                if (!this.placedCard) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; ctx.font = '12px "Noto Sans KR"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(this.type === 'number' ? "숫자" : "기호", this.x + this.width / 2, this.y + this.height / 2);
+                }
+                if (this.placedCard && !this.placedCard.isDragging) { this.placedCard.x = this.x; this.placedCard.y = this.y; this.placedCard.draw(ctx); }
+            }
+            isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
+        }
+
+        // --- 3.3 조립기 엔진 (탭1) ---
+        class FormulaEngine {
+            constructor(canvas, container, setAlert) {
+                this.canvas = canvas; this.ctx = canvas.getContext('2d');
+                this.container = container; this.setAlert = setAlert;
+                this.CW = 0; this.CH = 0; this.isMobile = false; this.layout = {};
+                this.cards = []; this.currentSlots = []; this.missionBtns = [];
+                this.draggingCard = null; this.dragOffset = {x:0, y:0};
+                this.currentMissionIndex = Storage.load('f_idx', 0);
+                this.missions = Storage.load('f_missions', FORMULA_MISSIONS.map(m => ({...m, completed: false})));
+                this.btnSubmit = { x:0, y:0, w:120, h:50 };
+                this.isAnimating = false; this.animationFrame = null; this._e = {};
+            }
+
+            init() {
+                const elements = ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'S', 'Cl', 'Cu', 'K', 'Mn'];
+                elements.forEach(el => this.cards.push(new DraggableCard(el, 'element')));
+                const numbers = ['1', '1', '2', '2', '3', '3', '4', '4'];
+                numbers.forEach(num => this.cards.push(new DraggableCard(num, 'number')));
+                
+                this.setupResize(); this.setupEvents();
+                this.loadMission(this.currentMissionIndex);
+                this.isAnimating = true; this.renderLoop();
+            }
+
+            setupResize() {
+                const handleResize = () => {
+                    if (!this.container) return; const rect = this.container.getBoundingClientRect();
+                    this.CW = rect.width; this.CH = rect.height;
+                    const dpr = window.devicePixelRatio || 1;
+                    this.canvas.width = this.CW * dpr; this.canvas.height = this.CH * dpr; this.ctx.scale(dpr, dpr);
+                    this.isMobile = this.CW < 768;
+                    this.updateLayout();
+                };
+                window.addEventListener('resize', handleResize); window.addEventListener('orientationchange', () => setTimeout(handleResize, 100));
+                this._e.handleResize = handleResize; handleResize();
+            }
+
+            updateLayout() {
+                const padding = this.isMobile ? 10 : 30;
+                const eW = this.isMobile ? Math.min(45, (this.CW - padding*2)/7 - 5) : 50; const eH = this.isMobile ? eW * 1.4 : 70;
+                const nW = this.isMobile ? Math.min(30, (this.CW - padding*2)/8 - 5) : 35; const nH = this.isMobile ? nW : 35;
+                this.elemFont = `bold ${this.isMobile ? 18 : 24}px "Noto Sans KR"`; this.numFont = `bold ${this.isMobile ? 14 : 20}px "Noto Sans KR"`;
+
+                this.missionBtns = [];
+                const cols = this.isMobile ? 3 : 5; const bGap = this.isMobile ? 5 : 10;
+                const bW = (this.CW - padding*2 - bGap*(cols-1)) / cols; const bH = this.isMobile ? 36 : 30; let startY = this.isMobile ? 40 : 35;
+                this.missions.forEach((m, i) => {
+                    let row = Math.floor(i / cols); let col = i % cols; let rItems = Math.min(cols, this.missions.length - row * cols);
+                    let sX = (this.CW - (rItems * bW + (rItems - 1) * bGap)) / 2;
+                    this.missionBtns.push({ index: i, name: m.title.split("(")[0].trim(), x: sX + col * (bW + bGap), y: startY + row * (bH + bGap), w: bW, h: bH });
+                });
+
+                const lastRowY = startY + Math.ceil(this.missions.length / cols) * (bH + bGap);
+                this.layout = {
+                    titleY: lastRowY + (this.isMobile ? 20 : 30),
+                    boxX: padding, boxY: lastRowY + (this.isMobile ? 40 : 50), boxW: this.CW - padding*2, boxH: this.isMobile ? eH + 30 : 100,
+                    slotBaseY: lastRowY + (this.isMobile ? 50 : 65),
+                };
+
+                if (this.isMobile) {
+                    this.btnSubmit = { x: (this.CW - 120)/2, y: this.layout.boxY + this.layout.boxH + 10, w: 120, h: 40 };
+                    this.layout.lineY = this.btnSubmit.y + 55; this.layout.guideY = this.layout.lineY + 20;
+                } else {
+                    this.btnSubmit = { x: this.layout.boxX + this.layout.boxW - 130, y: this.layout.boxY + 25, w: 110, h: 50 };
+                    this.layout.guideY = lastRowY + 180; this.layout.lineY = lastRowY + 160;
+                }
+
+                let elems = this.cards.filter(c => c.type === 'element'); let nums = this.cards.filter(c => c.type === 'number');
+                elems.forEach(c => { c.width = eW; c.height = eH; c.font = this.elemFont; }); nums.forEach(c => { c.width = nW; c.height = nH; c.font = this.numFont; });
+
+                const eCols = this.isMobile ? 7 : 14; const eGap = (this.CW - padding*2 - eCols*eW) / (eCols-1); const eStartY = this.layout.guideY + 20;
+                elems.forEach((c, i) => {
+                    c.originX = padding + (i % eCols) * (eW + eGap); c.originY = eStartY + Math.floor(i / eCols) * (eH + 10);
+                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
+                });
+                const nStartY = eStartY + Math.ceil(elems.length / eCols) * (eH + 10) + (this.isMobile ? 10 : 20);
+                const nCols = 8; const nGap = (this.CW - padding*2 - nCols*nW) / (nCols-1);
+                nums.forEach((c, i) => {
+                    c.originX = padding + (i % nCols) * (nW + nGap); c.originY = nStartY + Math.floor(i / nCols) * (nH + 10);
+                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
+                });
+
+                if (this.currentSlots.length > 0) {
+                    let tW = 0; const sGap = 10;
+                    this.currentSlots.forEach(s => { s.width = s.type === 'element' ? eW : nW; s.height = s.type === 'element' ? eH : nH; tW += s.width + sGap; });
+                    let cX = this.layout.boxX + (this.layout.boxW - tW + sGap) / 2;
+                    this.currentSlots.forEach(s => { s.x = cX; s.y = this.layout.slotBaseY + (s.type === 'number' ? eH - nH : 0); cX += s.width + sGap; });
+                }
+            }
+
+            getPos(e) {
+                const r = this.canvas.getBoundingClientRect(); let x = e.clientX, y = e.clientY;
+                if(e.touches && e.touches.length>0) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
+                return { x: x - r.left, y: y - r.top };
+            }
+
+            setupEvents() {
+                const onDown = (e) => {
+                    if (e.target !== this.canvas) return; e.preventDefault(); const pos = this.getPos(e);
+                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) {
+                        this.checkAns(); return;
+                    }
+                    for (let i = 0; i < this.missionBtns.length; i++) {
+                        let b = this.missionBtns[i];
+                        if (pos.x >= b.x && pos.x <= b.x+b.w && pos.y >= b.y && pos.y <= b.y+b.h) {
+                            audio.click(); this.currentMissionIndex = i; Storage.save('f_idx', i); this.loadMission(i); return;
+                        }
+                    }
+                    for (let i = this.cards.length - 1; i >= 0; i--) {
+                        let c = this.cards[i];
+                        if (c.isPointInside(pos.x, pos.y)) {
+                            audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y};
+                            this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; });
+                            this.cards.splice(i, 1); this.cards.push(c); break;
+                        }
+                    }
+                };
+                const onMove = (e) => { if(!this.draggingCard) return; e.preventDefault(); const p = this.getPos(e); this.draggingCard.x = p.x - this.dragOffset.x; this.draggingCard.y = p.y - this.dragOffset.y; };
+                const onUp = (e) => {
+                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false;
+                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    for (let s of this.currentSlots) {
+                        if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; }
+                    }
+                    if (!drop) this.draggingCard.resetPosition(); this.draggingCard = null;
+                };
+                this.canvas.addEventListener('mousedown', onDown); this.canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+                this.canvas.addEventListener('touchstart', onDown, {passive: false}); this.canvas.addEventListener('touchmove', onMove, {passive: false}); window.addEventListener('touchend', onUp);
+                this._e = {onDown, onMove, onUp, handleResize: this._e.handleResize};
+            }
+
+            loadMission(idx) {
+                if (!this.layout.boxX) return;
+                const m = this.missions[idx]; this.currentSlots = []; this.cards.forEach(c => c.resetPosition());
+                m.slots.forEach(s => this.currentSlots.push(new Slot(s.type, s.expected)));
+                this.updateLayout();
+            }
+
+            checkAns() {
+                let ok = true;
+                for (let s of this.currentSlots) { if (!s.placedCard || s.placedCard.text !== s.expected) { ok = false; break; } }
+                if (ok) {
+                    audio.success(); this.missions[this.currentMissionIndex].completed = true; Storage.save('f_missions', this.missions);
+                    this.setAlert({ isOpen: true, msg: "정답입니다! ⭕\n다른 물질을 선택해 보세요." });
+                } else {
+                    audio.error(); this.setAlert({ isOpen: true, msg: "틀렸습니다.\n올바른 기호와 숫자를 다시 배치해 보세요." });
+                }
+            }
+
+            stop() {
+                this.isAnimating = false; if(this.animationFrame) cancelAnimationFrame(this.animationFrame);
+                window.removeEventListener('resize', this._e.handleResize); window.removeEventListener('orientationchange', this._e.handleResize);
+                this.canvas.removeEventListener('mousedown', this._e.onDown); this.canvas.removeEventListener('mousemove', this._e.onMove); window.removeEventListener('mouseup', this._e.onUp);
+                this.canvas.removeEventListener('touchstart', this._e.onDown); this.canvas.removeEventListener('touchmove', this._e.onMove); window.removeEventListener('touchend', this._e.onUp);
+            }
+
+            renderLoop() {
+                if (!this.isAnimating) return;
+                this.ctx.fillStyle = '#12121c'; this.ctx.fillRect(0, 0, this.CW, this.CH);
+                this.ctx.fillStyle = '#00f3ff'; this.ctx.font = 'bold 16px "Noto Sans KR"'; this.ctx.textAlign = 'left'; this.ctx.textBaseline = 'top'; this.ctx.fillText("🧪 여러가지 물질의 화학식", 15, 15);
+
+                this.missionBtns.forEach(b => {
+                    let cur = this.currentMissionIndex === b.index;
+                    this.ctx.fillStyle = cur ? 'rgba(0, 243, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)';
+                    this.ctx.beginPath(); this.ctx.roundRect(b.x, b.y, b.w, b.h, 5); this.ctx.fill();
+                    this.ctx.strokeStyle = cur ? '#00f3ff' : '#475569'; this.ctx.lineWidth = 1; this.ctx.stroke();
+                    this.ctx.fillStyle = cur ? '#00f3ff' : '#cbd5e1'; this.ctx.font = `bold ${this.isMobile?11:13}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(b.name + (this.missions[b.index].completed ? " ⭕" : ""), b.x+b.w/2, b.y+b.h/2);
+                });
+
+                this.ctx.fillStyle = '#fff'; this.ctx.font = `bold ${this.isMobile?16:20}px "Noto Sans KR"`; this.ctx.textAlign = 'center';
+                this.ctx.fillText(this.missions[this.currentMissionIndex].title, this.CW/2, this.layout.titleY);
+
+                this.ctx.fillStyle = 'rgba(0,243,255,0.02)'; this.ctx.fillRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
+                this.ctx.strokeStyle = 'rgba(0,243,255,0.3)'; this.ctx.lineWidth=2; this.ctx.strokeRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
+
+                this.currentSlots.forEach(s => s.draw(this.ctx));
+                this.ctx.beginPath(); this.ctx.moveTo(this.layout.boxX, this.layout.lineY); this.ctx.lineTo(this.CW-this.layout.boxX, this.layout.lineY); this.ctx.strokeStyle='#334155'; this.ctx.stroke();
+                
+                this.ctx.fillStyle = '#94a3b8'; this.ctx.font = `bold ${this.isMobile?14:16}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; 
+                this.ctx.fillText("알맞은 기호와 숫자 카드를 드래그하여 배치하세요", this.CW/2, this.layout.guideY);
+
+                this.cards.forEach(c => { if (!this.currentSlots.some(s => s.placedCard===c) || c.isDragging) c.draw(this.ctx); });
+
+                this.ctx.fillStyle = 'rgba(0,243,255,0.1)'; this.ctx.beginPath(); this.ctx.roundRect(this.btnSubmit.x, this.btnSubmit.y, this.btnSubmit.w, this.btnSubmit.h, 8); this.ctx.fill();
+                this.ctx.strokeStyle = '#00f3ff'; this.ctx.lineWidth = 2; this.ctx.stroke();
+                this.ctx.fillStyle = '#00f3ff'; this.ctx.font = 'bold 18px "Noto Sans KR"'; this.ctx.textAlign='center'; this.ctx.textBaseline='middle';
+                this.ctx.fillText("정답 확인", this.btnSubmit.x+this.btnSubmit.w/2, this.btnSubmit.y+this.btnSubmit.h/2);
+
+                this.animationFrame = requestAnimationFrame(() => this.renderLoop());
+            }
+        }
+
+        // --- 3.4 샌드박스 엔진 (탭3) - 4단계 정교한 피드백 반영 ---
+        class SandboxEngine extends FormulaEngine {
+            constructor(canvas, container, setAlert, open3DModal) {
+                super(canvas, container, setAlert);
+                this.open3DModal = open3DModal;
+                this.missionBtns = []; 
+            }
+
+            init() {
+                const elements = ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'S', 'Cl', 'Cu', 'K', 'Mn'];
+                elements.forEach(el => this.cards.push(new DraggableCard(el, 'element')));
+                const numbers = ['1', '1', '2', '2', '3', '3', '4', '4'];
+                numbers.forEach(num => this.cards.push(new DraggableCard(num, 'number')));
+                
+                this.setupResize(); this.setupEvents();
+                // 슬롯 6개로 확장 (KMnO4 등 복잡한 분자 지원)
+                this.currentSlots = [new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number')];
+                this.updateLayout();
+                this.isAnimating = true; this.renderLoop();
+            }
+
+            updateLayout() {
+                const padding = this.isMobile ? 10 : 30;
+                const eW = this.isMobile ? Math.min(45, (this.CW - padding*2)/7 - 5) : 50; const eH = this.isMobile ? eW * 1.4 : 70;
+                const nW = this.isMobile ? Math.min(30, (this.CW - padding*2)/8 - 5) : 35; const nH = this.isMobile ? nW : 35;
+                this.elemFont = `bold ${this.isMobile ? 18 : 24}px "Noto Sans KR"`; this.numFont = `bold ${this.isMobile ? 14 : 20}px "Noto Sans KR"`;
+
+                this.layout = {
+                    titleY: 40,
+                    boxX: padding, boxY: 80, boxW: this.CW - padding*2, boxH: this.isMobile ? eH + 30 : 100,
+                    slotBaseY: 95,
+                };
+
+                if (this.isMobile) {
+                    this.btnSubmit = { x: (this.CW - 140)/2, y: this.layout.boxY + this.layout.boxH + 10, w: 140, h: 45 };
+                    this.layout.lineY = this.btnSubmit.y + 65; this.layout.guideY = this.layout.lineY + 20;
+                } else {
+                    this.btnSubmit = { x: this.layout.boxX + this.layout.boxW - 150, y: this.layout.boxY + 25, w: 130, h: 50 };
+                    this.layout.guideY = 220; this.layout.lineY = 200;
+                }
+
+                let elems = this.cards.filter(c => c.type === 'element'); let nums = this.cards.filter(c => c.type === 'number');
+                elems.forEach(c => { c.width = eW; c.height = eH; c.font = this.elemFont; }); nums.forEach(c => { c.width = nW; c.height = nH; c.font = this.numFont; });
+
+                const eCols = this.isMobile ? 7 : 14; const eGap = (this.CW - padding*2 - eCols*eW) / (eCols-1); const eStartY = this.layout.guideY + 20;
+                elems.forEach((c, i) => {
+                    c.originX = padding + (i % eCols) * (eW + eGap); c.originY = eStartY + Math.floor(i / eCols) * (eH + 10);
+                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
+                });
+                const nStartY = eStartY + Math.ceil(elems.length / eCols) * (eH + 10) + (this.isMobile ? 10 : 20);
+                const nCols = 8; const nGap = (this.CW - padding*2 - nCols*nW) / (nCols-1);
+                nums.forEach((c, i) => {
+                    c.originX = padding + (i % nCols) * (nW + nGap); c.originY = nStartY + Math.floor(i / nCols) * (nH + 10);
+                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
+                });
+
+                if (this.currentSlots.length > 0) {
+                    let tW = 0; const sGap = 10;
+                    this.currentSlots.forEach(s => { s.width = s.type === 'element' ? eW : nW; s.height = s.type === 'element' ? eH : nH; tW += s.width + sGap; });
+                    let cX = this.layout.boxX + (this.layout.boxW - tW + sGap) / 2;
+                    this.currentSlots.forEach(s => { s.x = cX; s.y = this.layout.slotBaseY + (s.type === 'number' ? eH - nH : 0); cX += s.width + sGap; });
+                }
+            }
+
+            setupEvents() {
+                const onDown = (e) => {
+                    if (e.target !== this.canvas) return; e.preventDefault(); const pos = this.getPos(e);
+                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) {
+                        this.synthesize(); return;
+                    }
+                    for (let i = this.cards.length - 1; i >= 0; i--) {
+                        let c = this.cards[i];
+                        if (c.isPointInside(pos.x, pos.y)) {
+                            audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y};
+                            this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; });
+                            this.cards.splice(i, 1); this.cards.push(c); break;
+                        }
+                    }
+                };
+                const onMove = (e) => { if(!this.draggingCard) return; e.preventDefault(); const p = this.getPos(e); this.draggingCard.x = p.x - this.dragOffset.x; this.draggingCard.y = p.y - this.dragOffset.y; };
+                const onUp = (e) => {
+                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false;
+                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    for (let s of this.currentSlots) {
+                        if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) {
+                            s.placedCard = this.draggingCard; drop = true; break;
+                        }
+                    }
+                    if (!drop) this.draggingCard.resetPosition();
+                    this.draggingCard = null;
+                };
+                this.canvas.addEventListener('mousedown', onDown); this.canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+                this.canvas.addEventListener('touchstart', onDown, {passive: false}); this.canvas.addEventListener('touchmove', onMove, {passive: false}); window.addEventListener('touchend', onUp);
+                this._e = {onDown, onMove, onUp, handleResize: this._e.handleResize};
+            }
+
+            synthesize() {
+                let formulaStr = "";
+                this.currentSlots.forEach(s => {
+                    if(s.placedCard) {
+                        if(s.type === 'number' && s.placedCard.text === '1') return; // 숫자 1은 생략 취급
+                        formulaStr += s.placedCard.text;
+                    }
+                });
+                
+                if(formulaStr === "") {
+                    audio.error(); this.setAlert({ isOpen: true, msg: "카드를 슬롯에 배치해 주세요."}); return;
+                }
+
+                // 4단계 피드백 분기 (선생님 요청사항 완벽 반영)
+                const SUPPORTED_3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
+                const VALID_NO_3D = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
+
+                if (SUPPORTED_3D.includes(formulaStr)) {
+                    // 경우 1 (3D 지원 모델)
+                    audio.success();
+                    this.open3DModal(formulaStr);
+                } else if (VALID_NO_3D.includes(formulaStr)) {
+                    // 경우 2 (3D 미지원 모델)
+                    audio.success();
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` });
+                } else if (formulaStr.includes('He') && formulaStr !== 'He') {
+                    // 경우 3-1 (헬륨 오개념)
+                    audio.error();
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 '비활성 기체'로 이미 안정하므로 다른 원소와 결합하지 않습니다.` });
+                } else if (['H','N','O','Cl'].includes(formulaStr)) {
+                    // 경우 3-2 (이원자 분자 오개념)
+                    audio.error();
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O2, H2 등)로 존재합니다.`});
+                } else if (['He','C','Cu','Na','Mg','Al','Si','S','K','Mn'].includes(formulaStr)) {
+                    // 원소 기호 자체 제출
+                    audio.success();
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n이것은 분자가 아니라 '원소 기호' 자체입니다.`});
+                } else {
+                    // 경우 4 (DB에 없는 조합 - 학생 탐구 유도형 메시지로 변경)
+                    audio.click();
+                    this.setAlert({ 
+                        isOpen: true, 
+                        msg: `[ ${formulaStr} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 불가능한 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 교과서나 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` 
+                    });
+                }
+            }
+
+            renderLoop() {
+                if (!this.isAnimating) return;
+                this.ctx.fillStyle = '#12121c'; this.ctx.fillRect(0, 0, this.CW, this.CH);
+                this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 16px "Noto Sans KR"'; this.ctx.textAlign = 'left'; this.ctx.textBaseline = 'top'; this.ctx.fillText("🔬 자유 연구실 (샌드박스)", 15, 15);
+
+                this.ctx.fillStyle = '#fff'; this.ctx.font = `bold ${this.isMobile?16:20}px "Noto Sans KR"`; this.ctx.textAlign = 'center';
+                this.ctx.fillText("원하는 분자를 자유롭게 합성해 보세요", this.CW/2, this.layout.titleY);
+
+                this.ctx.fillStyle = 'rgba(181,55,242,0.02)'; this.ctx.fillRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
+                this.ctx.strokeStyle = 'rgba(181,55,242,0.3)'; this.ctx.lineWidth=2; this.ctx.strokeRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
+
+                this.currentSlots.forEach(s => s.draw(this.ctx));
+                this.ctx.beginPath(); this.ctx.moveTo(this.layout.boxX, this.layout.lineY); this.ctx.lineTo(this.CW-this.layout.boxX, this.layout.lineY); this.ctx.strokeStyle='#334155'; this.ctx.stroke();
+                
+                this.ctx.fillStyle = '#94a3b8'; this.ctx.font = `bold ${this.isMobile?14:16}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; 
+                this.ctx.fillText("기호와 숫자 카드로 화학식을 완성하세요", this.CW/2, this.layout.guideY);
+
+                this.cards.forEach(c => { if (!this.currentSlots.some(s => s.placedCard===c) || c.isDragging) c.draw(this.ctx); });
+
+                this.ctx.fillStyle = 'rgba(181,55,242,0.1)'; this.ctx.beginPath(); this.ctx.roundRect(this.btnSubmit.x, this.btnSubmit.y, this.btnSubmit.w, this.btnSubmit.h, 8); this.ctx.fill();
+                this.ctx.strokeStyle = '#b537f2'; this.ctx.lineWidth = 2; this.ctx.stroke();
+                this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 18px "Noto Sans KR"'; this.ctx.textAlign='center'; this.ctx.textBaseline='middle';
+                this.ctx.fillText("합성 (Synthesize)", this.btnSubmit.x+this.btnSubmit.w/2, this.btnSubmit.y+this.btnSubmit.h/2);
+
+                this.animationFrame = requestAnimationFrame(() => this.renderLoop());
+            }
+        }
+
+
+        // ==========================================
+        // 4. React 컴포넌트
+        // ==========================================
+        const { useState, useEffect, useRef } = React;
+
+        const CustomAlert = ({ isOpen, message, onClose }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+                    <div className="glass-panel p-6 md:p-8 rounded-3xl w-full max-w-sm text-center border-gray-500 animate-shake bg-[#12121c]">
+                        <div className="w-16 h-16 mx-auto mb-4 bg-gray-500/20 rounded-full flex items-center justify-center"><span className="text-3xl">🔔</span></div>
+                        <p className="text-base md:text-lg font-bold text-white mb-8 whitespace-pre-line leading-relaxed">{message}</p>
+                        <button onClick={()=>{audio.click(); onClose();}} className="w-full py-4 bg-gray-500/20 text-gray-300 border border-gray-500 rounded-xl font-bold hover:bg-gray-500/40 transition-colors active:scale-95">확인했습니다</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const PinPadModal = ({ isOpen, targetTab, correctPin, onSuccess, onClose }) => {
+            const [pin, setPin] = useState(""); const [isError, setIsError] = useState(false);
+            useEffect(() => { if(isOpen) { setPin(""); setIsError(false); } }, [isOpen]);
+            useEffect(() => {
+                if (pin.length === 4) {
+                    if (pin === correctPin) { audio.unlock(); setTimeout(() => onSuccess(targetTab), 500); } 
+                    else { audio.error(); setIsError(true); setTimeout(() => { setPin(""); setIsError(false); }, 500); }
+                }
+            }, [pin]);
+
+            const handleNum = (n) => { if(pin.length < 4) { audio.click(); setPin(p => p + n); } };
+            const handleDel = () => { audio.click(); setPin(p => p.slice(0, -1)); };
+            if (!isOpen) return null;
+            
+            const isPurple = targetTab === 'sandbox';
+            const colorClass = isPurple ? 'text-neon-purple' : 'text-neon-red';
+            const shadowClass = isPurple ? 'shadow-[0_0_20px_rgba(181,55,242,0.3)]' : 'shadow-[0_0_20px_rgba(255,0,60,0.3)]';
+
+            return (
+                <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 backdrop-blur-md px-4">
+                    <div className={`glass-panel p-8 rounded-3xl w-full max-w-sm text-center ${isError ? 'animate-shake border-red-500' : 'border-gray-600'} ${shadowClass}`}>
+                        <div className="mb-6 flex justify-center"><span className="text-4xl">🔐</span></div>
+                        <h2 className={`text-xl font-bold mb-2 ${colorClass}`}>SECURITY CLEARANCE</h2>
+                        <p className="text-gray-400 text-sm mb-6">지도교사의 접근 승인 코드를 입력하세요.</p>
+                        <div className="flex justify-center gap-4 mb-8">
+                            {[0,1,2,3].map(i => <div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''} ${isPurple && i < pin.length ? '!bg-neon-purple !shadow-[0_0_10px_#b537f2] !border-neon-purple' : ''}`}></div>)}
+                        </div>
+                        <div className="grid grid-cols-3 gap-4 justify-items-center mb-6">
+                            {[1,2,3,4,5,6,7,8,9].map(n => <button key={n} onClick={()=>handleNum(n.toString())} className="pin-btn">{n}</button>)}
+                            <button onClick={onClose} className="pin-btn !text-sm !text-gray-400 !border-gray-600">취소</button>
+                            <button onClick={()=>handleNum('0')} className="pin-btn">0</button>
+                            <button onClick={handleDel} className="pin-btn !text-sm !text-red-400 !border-red-900">지움</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminGuideModal = ({ isOpen, onClose }) => {
+            const [copied, setCopied] = useState(false);
+            if (!isOpen) return null;
+            const scriptCode = `function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  sheet.appendRow([data.timestamp, data.studentId, data.studentName, data.escapeTime, data.quizScore, data.insight]);
+  return ContentService.createTextOutput(JSON.stringify({"result":"success"})).setMimeType(ContentService.MimeType.JSON);
+}`;
+            const handleCopy = () => {
+                audio.click();
+                if(navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(scriptCode).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); }); } 
+                else { const t = document.createElement("textarea"); t.value = scriptCode; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); setCopied(true); setTimeout(()=>setCopied(false), 2000); } catch(err){} document.body.removeChild(t); }
+            };
+
+            return (
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+                    <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border-gray-600 relative">
+                        <button onClick={()=>{audio.click(); onClose();}} className="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl font-bold">&times;</button>
+                        <div className="p-6 md:p-8">
+                            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><span className="text-2xl">⚙️</span> 교사 DB 연동 가이드</h2>
+                            <div className="space-y-6 text-sm md:text-base text-gray-300">
+                                <div className="bg-dark-800 p-4 rounded-lg border border-gray-700">
+                                    <h3 className="text-white font-bold mb-2">1. 구글 스프레드시트 준비</h3>
+                                    <code className="block mt-2 text-neon-blue bg-black p-2 rounded">제출일시 | 학번 | 이름 | 탈출시간(초) | 퀴즈점수 | 알게된점</code>
+                                </div>
+                                <div className="bg-dark-800 p-4 rounded-lg border border-gray-700">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="text-white font-bold">2. Apps Script 적용</h3>
+                                        <button onClick={handleCopy} className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white">{copied ? '복사 완료!' : '코드 복사'}</button>
+                                    </div>
+                                    <pre className="bg-black p-3 rounded overflow-x-auto text-green-400 text-xs font-mono select-all">{scriptCode}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Molecule3DModal = ({ isOpen, molecule, onClose }) => {
+            const canvasRef = useRef(null); const engineRef = useRef(null);
+            useEffect(() => {
+                if(isOpen && canvasRef.current) {
+                    if(!engineRef.current) engineRef.current = new MoleculeVisualizer(canvasRef.current);
+                    engineRef.current.resize(300, 300); engineRef.current.setMolecule(molecule); engineRef.current.start();
+                }
+                return () => { if(engineRef.current) engineRef.current.stop(); }
+            }, [isOpen, molecule]);
+            if(!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80 backdrop-blur-md px-4" onClick={onClose}>
+                    <div className="glass-panel p-6 rounded-3xl w-full max-w-sm text-center border-neon-purple shadow-[0_0_30px_rgba(181,55,242,0.3)] bg-[#12121c]" onClick={e=>e.stopPropagation()}>
+                        <h2 className="text-2xl font-black text-neon-purple mb-2">합성 성공!</h2>
+                        <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl">{molecule} 분자식 확인</div>
+                        <div className="w-[300px] h-[300px] mx-auto bg-black rounded-2xl overflow-hidden mb-4 cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
+                        <p className="text-gray-400 text-sm mb-4">드래그하여 3D 구조를 확인하세요.</p>
+                        <button onClick={()=>{audio.click(); onClose();}} className="w-full py-3 bg-neon-purple/20 text-neon-purple border border-neon-purple rounded-lg font-bold hover:bg-neon-purple/30 transition-colors">확인</button>
+                    </div>
+                </div>
+            )
+        }
+
+        const FormulaGameView = ({ setGlobalAlert }) => {
+            const canvasRef = useRef(null); const containerRef = useRef(null); const engineRef = useRef(null);
+            useEffect(() => {
+                if (canvasRef.current && containerRef.current && !engineRef.current) {
+                    engineRef.current = new FormulaEngine(canvasRef.current, containerRef.current, setGlobalAlert); engineRef.current.init();
+                }
+                return () => { if (engineRef.current) { engineRef.current.stop(); engineRef.current = null; } };
+            }, [setGlobalAlert]);
+            return <div className="flex-1 w-full relative bg-[#12121c]"><div className="canvas-container" ref={containerRef}><canvas className="full-canvas" ref={canvasRef}></canvas></div></div>;
+        };
+
+        const SandboxView = ({ setGlobalAlert }) => {
+            const canvasRef = useRef(null); const containerRef = useRef(null); const engineRef = useRef(null);
+            const [molModal, setMolModal] = useState({ isOpen: false, molecule: '' });
+            useEffect(() => {
+                if (canvasRef.current && containerRef.current && !engineRef.current) {
+                    engineRef.current = new SandboxEngine(canvasRef.current, containerRef.current, setGlobalAlert, (mol) => setMolModal({isOpen:true, molecule:mol})); engineRef.current.init();
+                }
+                return () => { if (engineRef.current) { engineRef.current.stop(); engineRef.current = null; } };
+            }, [setGlobalAlert]);
+            return (
+                <div className="flex-1 w-full relative bg-[#12121c]">
+                    <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,rgba(181,55,242,0.05)_0,transparent_70%)]"></div>
+                    <div className="canvas-container" ref={containerRef}><canvas className="full-canvas" ref={canvasRef}></canvas></div>
+                    <Molecule3DModal isOpen={molModal.isOpen} molecule={molModal.molecule} onClose={()=>setMolModal({isOpen:false, molecule:''})} />
+                </div>
+            );
+        };
+
+        const EscapeIntroView = ({ onStart }) => (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 relative bg-dark-900">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(57,255,20,0.05)_0,transparent_50%)]"></div>
+                <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-green">
+                    <h1 className="text-3xl md:text-5xl font-black mb-4 text-glow-green tracking-tight">비밀 연구소<br/>방탈출</h1>
+                    <p className="text-gray-300 mb-8 leading-relaxed font-medium">물질의 구성 성분을 파악하고 암호를 해독하여 연구소를 탈출하세요!</p>
+                    <button onClick={()=>{audio.click(); onStart();}} className="w-full py-4 px-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 text-white font-bold rounded-xl text-xl shadow-[0_0_20px_rgba(57,255,20,0.4)] active:scale-95">연구소 진입하기</button>
+                </div>
+            </div>
+        );
+
+        const EscapeSimulationView = ({ onFinish, stats, setStats }) => {
+            const [levelIdx, setLevelIdx] = useState(Storage.load('e_level', 0));
+            const [inputValue, setInputValue] = useState("");
+            const [isWrong, setIsWrong] = useState(false); const [isSolved, setIsSolved] = useState(false); const [showHint, setShowHint] = useState(false);
+            const [elapsedTime, setElapsedTime] = useState(Storage.load('e_time', 0));
+            
+            const canvasRef = useRef(null); const rendererRef = useRef(null); const timerRef = useRef(null);
+            const currentLevel = ESCAPE_ROOM_LEVELS[levelIdx];
+
+            useEffect(() => { timerRef.current = setInterval(() => { setElapsedTime(p => { const nt = p + 1; Storage.save('e_time', nt); return nt; }); }, 1000); return () => clearInterval(timerRef.current); }, []);
+
+            useEffect(() => {
+                if (canvasRef.current && !rendererRef.current) {
+                    rendererRef.current = new MoleculeVisualizer(canvasRef.current);
+                    const handleResize = () => { if(canvasRef.current.parentElement) rendererRef.current.resize(canvasRef.current.parentElement.clientWidth, canvasRef.current.parentElement.clientHeight); };
+                    window.addEventListener('resize', handleResize); handleResize(); rendererRef.current.start();
+                    return () => { window.removeEventListener('resize', handleResize); rendererRef.current.stop(); };
+                }
+            }, []);
+
+            useEffect(() => { setInputValue(""); setShowHint(false); if (rendererRef.current && !isSolved) { rendererRef.current.atoms = []; rendererRef.current.bonds = []; } }, [levelIdx, isSolved]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault(); if(!inputValue.trim() || isSolved) return;
+                const norm = (str) => str.replace(/\s+/g, '').toLowerCase();
+                if (currentLevel.answer.some(ans => norm(ans) === norm(inputValue))) {
+                    audio.success(); setIsSolved(true); if (rendererRef.current) rendererRef.current.setMolecule(currentLevel.moleculeType);
+                    setTimeout(() => {
+                        if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); } 
+                        else { clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); }
+                    }, 3500);
+                } else { audio.error(); setIsWrong(true); setTimeout(() => setIsWrong(false), 500); }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col md:flex-row relative bg-dark-900">
+                    <div className="md:w-1/3 p-6 flex flex-col justify-between z-10 glass-panel md:rounded-none md:border-y-0 md:border-l-0 border-r border-gray-800">
+                        <div>
+                            <div className="text-xl font-mono text-cyan-400 font-bold mb-8">TIMER <span className="text-white ml-2">{Math.floor(elapsedTime/60).toString().padStart(2,'0')}:{(elapsedTime%60).toString().padStart(2,'0')}</span></div>
+                            <div className={`inline-flex px-3 py-1 rounded-full border ${currentLevel.borderColor} ${currentLevel.color} bg-opacity-10 mb-4 text-sm font-bold`}>LEVEL 0{currentLevel.id}</div>
+                            <h2 className="text-lg md:text-xl font-bold leading-relaxed mb-6">{currentLevel.question}</h2>
+                        </div>
+                        <div className={`transition-opacity ${isSolved ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <input type="text" value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="정답 입력" className={`w-full bg-dark-900 border-2 border-gray-700 focus:border-cyan-500 rounded-xl px-4 py-3 text-lg font-mono text-center text-white outline-none ${isWrong ? 'animate-shake' : ''}`} disabled={isSolved}/>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => {audio.click(); setShowHint(true)}} className="px-4 py-3 bg-gray-800 text-gray-300 rounded-xl w-1/3 font-bold">힌트</button>
+                                    <button type="submit" className={`px-4 py-3 rounded-xl font-bold w-2/3 transition-all ${inputValue.trim() ? 'bg-cyan-600 text-white active:scale-95' : 'bg-gray-800 text-gray-500'}`}>해독 시도</button>
+                                </div>
+                                {showHint && <div className="p-3 bg-yellow-500/10 text-yellow-300 text-sm text-center rounded-lg border border-yellow-500/30">💡 {currentLevel.hint}</div>}
+                            </form>
+                        </div>
+                    </div>
+                    <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden min-h-[50vh]">
+                        <div className="absolute inset-0 z-20 w-full h-full cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
+                        {isSolved && (
+                            <div className="absolute inset-0 z-30 flex items-center justify-center flex-col bg-black/50 backdrop-blur-sm text-center px-4">
+                                <div className={`text-3xl md:text-5xl font-black mb-4 ${currentLevel.color} drop-shadow-[0_0_20px_currentColor]`}>ACCESS GRANTED</div>
+                                <div className="text-gray-300 text-sm md:text-base">화면을 드래그하여 분자를 회전해 보세요</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const EscapeReportView = ({ onSubmit, escapeTime, setGlobalAlert }) => {
+            const [form, setForm] = useState({ studentId: '', studentName: '', insight: '' });
+            const [quizzes, setQuizzes] = useState([]); const [answers, setAnswers] = useState([null, null, null]); const [showResults, setShowResults] = useState(false);
+            
+            useEffect(() => { setQuizzes([...QUIZ_POOL].sort(() => 0.5 - Math.random()).slice(0, 3)); }, []);
+            const handleAnswer = (idx, val) => { if(!showResults) { audio.click(); const newAns = [...answers]; newAns[idx] = val; setAnswers(newAns); } };
+
+            const handleSubmit = () => {
+                if (!form.studentId.trim() || !form.studentName.trim() || !form.insight.trim()) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "모든 항목을 입력해주세요." }); }
+                if (answers.includes(null)) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "퀴즈를 모두 풀어주세요." }); }
+                if (!showResults) { audio.success(); setShowResults(true); } else { audio.click(); onSubmit({ ...form, quizScore: Math.round(answers.reduce((acc, ans, idx) => acc + (ans === quizzes[idx].a ? 1 : 0), 0) * 33.3) }); }
+            };
+
+            return (
+                <div className="flex-1 p-4 flex flex-col items-center py-8 bg-dark-900 overflow-y-auto">
+                    <div className="w-full max-w-3xl glass-panel rounded-3xl overflow-hidden shadow-2xl">
+                        <div className="bg-blue-900/50 p-6 text-center border-b border-blue-500/30">
+                            <h2 className="text-xl md:text-2xl font-black text-white mb-2">탈출 성공! 소요 시간: {Math.floor(escapeTime/60)}분 {escapeTime%60}초</h2>
+                        </div>
+                        <div className="p-4 md:p-6 space-y-6 md:space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="text" placeholder="학번" className="bg-dark-900 border border-gray-700 rounded-xl p-3 focus:border-cyan-500 outline-none" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} disabled={showResults} />
+                                <input type="text" placeholder="이름" className="bg-dark-900 border border-gray-700 rounded-xl p-3 focus:border-cyan-500 outline-none" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} disabled={showResults} />
+                            </div>
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-neon-green">OX 퀴즈</h3>
+                                {quizzes.map((q, i) => (
+                                    <div key={i} className={`p-4 rounded-xl border ${showResults ? (answers[i] === q.a ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20') : 'border-gray-700 bg-dark-800'}`}>
+                                        <p className="mb-3 text-sm md:text-base">{q.q}</p>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleAnswer(i, true)} className={`flex-1 py-2 rounded font-bold border transition-colors ${answers[i] === true ? 'bg-blue-600 text-white' : 'bg-dark-900 text-gray-400'}`} disabled={showResults}>O</button>
+                                            <button onClick={() => handleAnswer(i, false)} className={`flex-1 py-2 rounded font-bold border transition-colors ${answers[i] === false ? 'bg-red-600 text-white' : 'bg-dark-900 text-gray-400'}`} disabled={showResults}>X</button>
+                                        </div>
+                                        {showResults && <div className="mt-2 text-xs md:text-sm text-gray-300">{q.explain}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                            <textarea placeholder="알게 된 점" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-3 h-24 resize-none focus:border-cyan-500 outline-none" value={form.insight} onChange={e => setForm({...form, insight: e.target.value})} disabled={showResults}></textarea>
+                            <button onClick={handleSubmit} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl active:scale-95">{showResults ? '서버로 제출' : '채점하기'}</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const EscapeDoneView = ({ onRestart }) => (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-dark-900">
+                <div className="glass-panel p-8 md:p-10 rounded-3xl max-w-md w-full border-t-4 border-t-neon-blue">
+                    <h2 className="text-2xl md:text-3xl font-black text-white mb-4 text-glow-blue">보고서 제출 완료!</h2>
+                    <p className="text-gray-300 mb-8">지구 환경을 위한 데이터가 서버에 기록되었습니다.</p>
+                    <button onClick={()=>{audio.click(); onRestart();}} className="w-full py-4 bg-dark-800 hover:bg-dark-700 text-white font-bold rounded-xl">처음으로</button>
+                </div>
+            </div>
+        );
+
+        const EscapeRoomFlow = ({ setGlobalAlert }) => {
+            const [view, setView] = useState('intro'); const [stats, setStats] = useState({ escapeTime: 0 });
+            const submitData = async (formData) => {
+                if (!GOOGLE_SCRIPT_URL) return setGlobalAlert({ isOpen: true, msg: "DB 연동 오류! GOOGLE_SCRIPT_URL을 설정하세요." });
+                try {
+                    await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, escapeTime: stats.escapeTime, timestamp: new Date().toLocaleString()}) });
+                    Storage.save('e_level', 0); Storage.save('e_time', 0); setView('done');
+                } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); }
+            };
+            return (
+                <div className="flex-1 flex flex-col w-full h-full">
+                    {view === 'intro' && <EscapeIntroView onStart={() => setView('simulation')} />}
+                    {view === 'simulation' && <EscapeSimulationView onFinish={() => setView('report')} stats={stats} setStats={setStats} />}
+                    {view === 'report' && <EscapeReportView onSubmit={submitData} escapeTime={stats.escapeTime} setGlobalAlert={setGlobalAlert} />}
+                    {view === 'done' && <EscapeDoneView onRestart={() => setView('intro')} />}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('formula'); 
+            const [unlockedTabs, setUnlockedTabs] = useState(Storage.load('unlocked', { escape: false, sandbox: false }));
+            const [alertData, setAlertData] = useState({ isOpen: false, msg: "" });
+            const [isGuideOpen, setIsGuideOpen] = useState(false);
+            const [pinModal, setPinModal] = useState({ isOpen: false, target: null, code: "" });
+
+            const handleTabClick = (tab) => {
+                if(tab === activeTab) return; audio.click();
+                if (tab === 'escape' && !unlockedTabs.escape) setPinModal({ isOpen: true, target: 'escape', code: '0070' });
+                else if (tab === 'sandbox' && !unlockedTabs.sandbox) setPinModal({ isOpen: true, target: 'sandbox', code: '0303' });
+                else setActiveTab(tab);
+            };
+
+            const handlePinSuccess = (targetTab) => {
+                const newUnlocked = { ...unlockedTabs, [targetTab]: true };
+                setUnlockedTabs(newUnlocked); Storage.save('unlocked', newUnlocked);
+                setPinModal({ isOpen: false, target: null, code: "" }); setActiveTab(targetTab);
+            };
+
+            return (
+                <div className="h-screen flex flex-col font-sans relative overflow-hidden bg-dark-900">
+                    <CustomAlert isOpen={alertData.isOpen} message={alertData.msg} onClose={() => setAlertData({isOpen: false, msg: ""})} />
+                    <AdminGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
+                    <PinPadModal isOpen={pinModal.isOpen} targetTab={pinModal.target} correctPin={pinModal.code} onSuccess={handlePinSuccess} onClose={()=>setPinModal({isOpen:false, target:null, code:""})} />
+                    
+                    <header className="z-50 bg-dark-900 border-b border-gray-800 flex justify-between items-center px-2 md:px-8 h-14 shrink-0 overflow-x-auto whitespace-nowrap">
+                        <div className="flex gap-2 md:gap-6 font-bold text-xs md:text-base h-full">
+                            <button onClick={() => handleTabClick('formula')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'formula' ? 'text-neon-blue border-neon-blue drop-shadow-[0_0_8px_rgba(0,243,255,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                🧪 <span className="hidden sm:inline">화학식 </span>조립기
+                            </button>
+                            <button onClick={() => handleTabClick('escape')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'escape' ? 'text-neon-green border-neon-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.escape ? '🔓' : '🔒'} <span className="hidden sm:inline">비밀 </span>연구소
+                            </button>
+                            <button onClick={() => handleTabClick('sandbox')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'sandbox' ? 'text-neon-purple border-neon-purple drop-shadow-[0_0_8px_rgba(181,55,242,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.sandbox ? '🔬' : '🔒'} 샌드박스
+                            </button>
+                        </div>
+                        <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-4">⚙️</button>
+                    </header>
+
+                    <main className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
+                        {activeTab === 'formula' && <FormulaGameView setGlobalAlert={setAlertData} />}
+                        {activeTab === 'escape' && <EscapeRoomFlow setGlobalAlert={setAlertData} />}
+                        {activeTab === 'sandbox' && <SandboxView setGlobalAlert={setAlertData} />}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
