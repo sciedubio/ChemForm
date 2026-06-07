@@ -146,7 +146,7 @@
         // 3. Canvas Engines (Vanilla JS)
         // ==========================================
         
-        // --- 3.1 3D 분자 모형 (방탈출 및 샌드박스용 대규모 확장) ---
+        // --- 3.1 3D 분자 모형 (방탈출 및 샌드박스용) ---
         class MoleculeVisualizer {
             constructor(canvas) {
                 this.canvas = canvas; this.ctx = canvas.getContext('2d');
@@ -156,7 +156,13 @@
                 this.isDragging = false; this.prevMouse = { x: 0, y: 0 };
                 this.setupEvents();
             }
-            resize(w, h) { this.width = w; this.height = h; this.canvas.width = w; this.canvas.height = h; }
+            resize(w, h) { 
+                const dpr = window.devicePixelRatio || 1;
+                this.width = w; this.height = h; 
+                this.canvas.width = w * dpr; 
+                this.canvas.height = h * dpr; 
+                this.ctx.scale(dpr, dpr);
+            }
             setupEvents() {
                 const start = (e) => { this.isDragging = true; this.prevMouse = { x: e.touches ? e.touches[0].clientX : e.clientX, y: e.touches ? e.touches[0].clientY : e.clientY }; };
                 const drag = (e) => {
@@ -180,7 +186,6 @@
                 const a = (x, y, z, e) => { this.atoms.push({ ox: x*scale, oy: y*scale, oz: z*scale, x:0, y:0, z:0, c: AP[e][0], r: AP[e][1]*scale*0.3, s: AP[e][2] }); return this.atoms.length - 1; };
                 const b = (i, j, t=1) => { this.bonds.push({ i, j, t }); };
 
-                // 3D 구조 하드코딩 DB
                 if (type === 'H2O') { const o = a(0,0,0,'O'); b(o, a(0.8,0.6,0,'H')); b(o, a(-0.8,0.6,0,'H')); } 
                 else if (type === 'CO2') { const c = a(0,0,0,'C'); b(c, a(1.2,0,0,'O'), 2); b(c, a(-1.2,0,0,'O'), 2); } 
                 else if (type === 'CH4') { const c = a(0,0,0,'C'); b(c, a(1,1,1,'H')); b(c, a(-1,-1,1,'H')); b(c, a(-1,1,-1,'H')); b(c, a(1,-1,-1,'H')); } 
@@ -490,7 +495,7 @@
             }
         }
 
-        // --- 3.4 샌드박스 엔진 (탭3) - 4단계 정교한 피드백 반영 ---
+        // --- 3.4 샌드박스 엔진 (탭3) ---
         class SandboxEngine extends FormulaEngine {
             constructor(canvas, container, setAlert, open3DModal) {
                 super(canvas, container, setAlert);
@@ -505,7 +510,6 @@
                 numbers.forEach(num => this.cards.push(new DraggableCard(num, 'number')));
                 
                 this.setupResize(); this.setupEvents();
-                // 슬롯 6개로 확장 (KMnO4 등 복잡한 분자 지원)
                 this.currentSlots = [new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number')];
                 this.updateLayout();
                 this.isAnimating = true; this.renderLoop();
@@ -599,36 +603,29 @@
                     audio.error(); this.setAlert({ isOpen: true, msg: "카드를 슬롯에 배치해 주세요."}); return;
                 }
 
-                // 4단계 피드백 분기 (선생님 요청사항 완벽 반영)
                 const SUPPORTED_3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
                 const VALID_NO_3D = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
 
                 if (SUPPORTED_3D.includes(formulaStr)) {
-                    // 경우 1 (3D 지원 모델)
                     audio.success();
                     this.open3DModal(formulaStr);
                 } else if (VALID_NO_3D.includes(formulaStr)) {
-                    // 경우 2 (3D 미지원 모델)
                     audio.success();
                     this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` });
                 } else if (formulaStr.includes('He') && formulaStr !== 'He') {
-                    // 경우 3-1 (헬륨 오개념)
                     audio.error();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 '비활성 기체'로 이미 안정하므로 다른 원소와 결합하지 않습니다.` });
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 18족 '비활성 기체'로 이미 안정하여 다른 원소와 결합하지 않습니다.` });
                 } else if (['H','N','O','Cl'].includes(formulaStr)) {
-                    // 경우 3-2 (이원자 분자 오개념)
                     audio.error();
                     this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O2, H2 등)로 존재합니다.`});
                 } else if (['He','C','Cu','Na','Mg','Al','Si','S','K','Mn'].includes(formulaStr)) {
-                    // 원소 기호 자체 제출
                     audio.success();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n이것은 분자가 아니라 '원소 기호' 자체입니다.`});
+                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n이것은 분자가 아니라 단일 '원소' 입니다.`});
                 } else {
-                    // 경우 4 (DB에 없는 조합 - 학생 탐구 유도형 메시지로 변경)
                     audio.click();
                     this.setAlert({ 
                         isOpen: true, 
-                        msg: `[ ${formulaStr} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 불가능한 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 교과서나 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` 
+                        msg: `[ ${formulaStr} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` 
                     });
                 }
             }
@@ -639,7 +636,7 @@
                 this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 16px "Noto Sans KR"'; this.ctx.textAlign = 'left'; this.ctx.textBaseline = 'top'; this.ctx.fillText("🔬 자유 연구실 (샌드박스)", 15, 15);
 
                 this.ctx.fillStyle = '#fff'; this.ctx.font = `bold ${this.isMobile?16:20}px "Noto Sans KR"`; this.ctx.textAlign = 'center';
-                this.ctx.fillText("원하는 분자를 자유롭게 합성해 보세요", this.CW/2, this.layout.titleY);
+                this.ctx.fillText("원하는 화학식을 자유롭게 합성해 보세요", this.CW/2, this.layout.titleY);
 
                 this.ctx.fillStyle = 'rgba(181,55,242,0.02)'; this.ctx.fillRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
                 this.ctx.strokeStyle = 'rgba(181,55,242,0.3)'; this.ctx.lineWidth=2; this.ctx.strokeRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
@@ -729,8 +726,16 @@
 }`;
             const handleCopy = () => {
                 audio.click();
-                if(navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(scriptCode).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); }); } 
-                else { const t = document.createElement("textarea"); t.value = scriptCode; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); setCopied(true); setTimeout(()=>setCopied(false), 2000); } catch(err){} document.body.removeChild(t); }
+                const fallbackCopy = () => {
+                    const t = document.createElement("textarea"); t.value = scriptCode; document.body.appendChild(t); t.select(); 
+                    try { document.execCommand('copy'); setCopied(true); setTimeout(()=>setCopied(false), 2000); } catch(err){} 
+                    document.body.removeChild(t);
+                };
+                if(navigator.clipboard && window.isSecureContext) { 
+                    navigator.clipboard.writeText(scriptCode)
+                    .then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); })
+                    .catch(err => { fallbackCopy(); }); 
+                } else { fallbackCopy(); }
             };
 
             return (
@@ -769,13 +774,13 @@
             }, [isOpen, molecule]);
             if(!isOpen) return null;
             return (
-                <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80 backdrop-blur-md px-4" onClick={onClose}>
+                <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80 backdrop-blur-md px-4 pointer-events-auto" onClick={onClose}>
                     <div className="glass-panel p-6 rounded-3xl w-full max-w-sm text-center border-neon-purple shadow-[0_0_30px_rgba(181,55,242,0.3)] bg-[#12121c]" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-2xl font-black text-neon-purple mb-2">합성 성공!</h2>
                         <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl">{molecule} 분자식 확인</div>
                         <div className="w-[300px] h-[300px] mx-auto bg-black rounded-2xl overflow-hidden mb-4 cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
                         <p className="text-gray-400 text-sm mb-4">드래그하여 3D 구조를 확인하세요.</p>
-                        <button onClick={()=>{audio.click(); onClose();}} className="w-full py-3 bg-neon-purple/20 text-neon-purple border border-neon-purple rounded-lg font-bold hover:bg-neon-purple/30 transition-colors">확인</button>
+                        <button onClick={()=>{audio.click(); onClose();}} className="w-full py-4 bg-neon-purple/20 text-neon-purple border border-neon-purple rounded-xl font-bold hover:bg-neon-purple/30 transition-colors active:scale-95">확인했습니다</button>
                     </div>
                 </div>
             )
@@ -835,7 +840,7 @@
             useEffect(() => {
                 if (canvasRef.current && !rendererRef.current) {
                     rendererRef.current = new MoleculeVisualizer(canvasRef.current);
-                    const handleResize = () => { if(canvasRef.current.parentElement) rendererRef.current.resize(canvasRef.current.parentElement.clientWidth, canvasRef.current.parentElement.clientHeight); };
+                    const handleResize = () => { if(canvasRef.current && canvasRef.current.parentElement) rendererRef.current.resize(canvasRef.current.parentElement.clientWidth, canvasRef.current.parentElement.clientHeight); };
                     window.addEventListener('resize', handleResize); handleResize(); rendererRef.current.start();
                     return () => { window.removeEventListener('resize', handleResize); rendererRef.current.stop(); };
                 }
@@ -848,12 +853,17 @@
                 const norm = (str) => str.replace(/\s+/g, '').toLowerCase();
                 if (currentLevel.answer.some(ans => norm(ans) === norm(inputValue))) {
                     audio.success(); setIsSolved(true); if (rendererRef.current) rendererRef.current.setMolecule(currentLevel.moleculeType);
-                    setTimeout(() => {
-                        if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); } 
-                        else { clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); }
-                    }, 3500);
                 } else { audio.error(); setIsWrong(true); setTimeout(() => setIsWrong(false), 500); }
             };
+
+            const handleNextLevel = () => {
+                audio.click();
+                if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { 
+                    setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); 
+                } else { 
+                    clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); 
+                }
+            }
 
             return (
                 <div className="flex-1 flex flex-col md:flex-row relative bg-dark-900">
@@ -877,9 +887,16 @@
                     <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden min-h-[50vh]">
                         <div className="absolute inset-0 z-20 w-full h-full cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
                         {isSolved && (
-                            <div className="absolute inset-0 z-30 flex items-center justify-center flex-col bg-black/50 backdrop-blur-sm text-center px-4">
-                                <div className={`text-3xl md:text-5xl font-black mb-4 ${currentLevel.color} drop-shadow-[0_0_20px_currentColor]`}>ACCESS GRANTED</div>
-                                <div className="text-gray-300 text-sm md:text-base">화면을 드래그하여 분자를 회전해 보세요</div>
+                            <div className="absolute inset-0 z-30 flex flex-col items-center justify-between py-10 pointer-events-none">
+                                <div className="flex flex-col items-center px-4 text-center">
+                                    <div className={`text-3xl md:text-5xl font-black mb-4 ${currentLevel.color} drop-shadow-[0_0_20px_currentColor]`}>ACCESS GRANTED</div>
+                                    <div className="text-gray-300 text-sm md:text-base font-bold bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-700">
+                                        화면을 드래그하여 분자의 구조를 관찰하세요
+                                    </div>
+                                </div>
+                                <button onClick={handleNextLevel} className="pointer-events-auto mt-4 mx-4 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-2xl text-lg md:text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] transition-transform active:scale-95">
+                                    {levelIdx < ESCAPE_ROOM_LEVELS.length - 1 ? '다음 구역으로 이동 ➔' : '방탈출 성공! 보고서 쓰기 ➔'}
+                                </button>
                             </div>
                         )}
                     </div>
@@ -901,31 +918,33 @@
             };
 
             return (
-                <div className="flex-1 p-4 flex flex-col items-center py-8 bg-dark-900 overflow-y-auto">
-                    <div className="w-full max-w-3xl glass-panel rounded-3xl overflow-hidden shadow-2xl">
-                        <div className="bg-blue-900/50 p-6 text-center border-b border-blue-500/30">
-                            <h2 className="text-xl md:text-2xl font-black text-white mb-2">탈출 성공! 소요 시간: {Math.floor(escapeTime/60)}분 {escapeTime%60}초</h2>
-                        </div>
-                        <div className="p-4 md:p-6 space-y-6 md:space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input type="text" placeholder="학번" className="bg-dark-900 border border-gray-700 rounded-xl p-3 focus:border-cyan-500 outline-none" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} disabled={showResults} />
-                                <input type="text" placeholder="이름" className="bg-dark-900 border border-gray-700 rounded-xl p-3 focus:border-cyan-500 outline-none" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} disabled={showResults} />
+                <div className="absolute inset-0 w-full h-full overflow-y-auto bg-dark-900">
+                    <div className="min-h-full flex flex-col items-center p-4 py-8 pb-32">
+                        <div className="w-full max-w-3xl glass-panel rounded-3xl overflow-hidden shadow-2xl shrink-0">
+                            <div className="bg-blue-900/50 p-6 text-center border-b border-blue-500/30">
+                                <h2 className="text-xl md:text-2xl font-black text-white mb-2">탈출 성공! 소요 시간: {Math.floor(escapeTime/60)}분 {escapeTime%60}초</h2>
                             </div>
-                            <div className="space-y-4">
-                                <h3 className="font-bold text-neon-green">OX 퀴즈</h3>
-                                {quizzes.map((q, i) => (
-                                    <div key={i} className={`p-4 rounded-xl border ${showResults ? (answers[i] === q.a ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20') : 'border-gray-700 bg-dark-800'}`}>
-                                        <p className="mb-3 text-sm md:text-base">{q.q}</p>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleAnswer(i, true)} className={`flex-1 py-2 rounded font-bold border transition-colors ${answers[i] === true ? 'bg-blue-600 text-white' : 'bg-dark-900 text-gray-400'}`} disabled={showResults}>O</button>
-                                            <button onClick={() => handleAnswer(i, false)} className={`flex-1 py-2 rounded font-bold border transition-colors ${answers[i] === false ? 'bg-red-600 text-white' : 'bg-dark-900 text-gray-400'}`} disabled={showResults}>X</button>
+                            <div className="p-4 md:p-8 space-y-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <input type="text" placeholder="학번" className="bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-cyan-500 outline-none text-lg" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} disabled={showResults} />
+                                    <input type="text" placeholder="이름" className="bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-cyan-500 outline-none text-lg" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} disabled={showResults} />
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="font-bold text-neon-green text-lg">OX 퀴즈</h3>
+                                    {quizzes.map((q, i) => (
+                                        <div key={i} className={`p-5 rounded-2xl border ${showResults ? (answers[i] === q.a ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20') : 'border-gray-700 bg-dark-800'}`}>
+                                            <p className="mb-4 text-base md:text-lg leading-relaxed">{q.q}</p>
+                                            <div className="flex gap-3">
+                                                <button onClick={() => handleAnswer(i, true)} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-colors ${answers[i] === true ? 'bg-blue-600 border-blue-400 text-white' : 'bg-dark-900 border-gray-600 text-gray-400'}`} disabled={showResults}>O</button>
+                                                <button onClick={() => handleAnswer(i, false)} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-colors ${answers[i] === false ? 'bg-red-600 border-red-400 text-white' : 'bg-dark-900 border-gray-600 text-gray-400'}`} disabled={showResults}>X</button>
+                                            </div>
+                                            {showResults && <div className="mt-4 p-3 bg-black/40 rounded-lg text-sm md:text-base text-gray-300 border border-gray-700">{q.explain}</div>}
                                         </div>
-                                        {showResults && <div className="mt-2 text-xs md:text-sm text-gray-300">{q.explain}</div>}
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                                <textarea placeholder="오늘 연구소를 탈출하며 알게 된 점을 적어주세요." className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 h-32 resize-none focus:border-cyan-500 outline-none text-lg" value={form.insight} onChange={e => setForm({...form, insight: e.target.value})} disabled={showResults}></textarea>
+                                <button onClick={handleSubmit} className="w-full py-5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-xl text-xl shadow-[0_0_15px_rgba(0,243,255,0.4)] active:scale-95 transition-transform">{showResults ? '서버로 최종 제출 ➔' : '채점 결과 확인하기'}</button>
                             </div>
-                            <textarea placeholder="알게 된 점" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-3 h-24 resize-none focus:border-cyan-500 outline-none" value={form.insight} onChange={e => setForm({...form, insight: e.target.value})} disabled={showResults}></textarea>
-                            <button onClick={handleSubmit} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl active:scale-95">{showResults ? '서버로 제출' : '채점하기'}</button>
                         </div>
                     </div>
                 </div>
@@ -952,7 +971,7 @@
                 } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); }
             };
             return (
-                <div className="flex-1 flex flex-col w-full h-full">
+                <div className="flex-1 flex flex-col w-full h-full relative">
                     {view === 'intro' && <EscapeIntroView onStart={() => setView('simulation')} />}
                     {view === 'simulation' && <EscapeSimulationView onFinish={() => setView('report')} stats={stats} setStats={setStats} />}
                     {view === 'report' && <EscapeReportView onSubmit={submitData} escapeTime={stats.escapeTime} setGlobalAlert={setGlobalAlert} />}
@@ -996,7 +1015,7 @@
                                 {unlockedTabs.escape ? '🔓' : '🔒'} <span className="hidden sm:inline">비밀 </span>연구소
                             </button>
                             <button onClick={() => handleTabClick('sandbox')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'sandbox' ? 'text-neon-purple border-neon-purple drop-shadow-[0_0_8px_rgba(181,55,242,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.sandbox ? '🔬' : '🔒'} 샌드박스
+                                {unlockedTabs.sandbox ? '🔬' : '🔒'} <span className="hidden sm:inline">자유 </span>샌드박스
                             </button>
                         </div>
                         <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-4">⚙️</button>
