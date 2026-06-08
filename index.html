@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>비밀 연구소: 화학식 방탈출 & 조립기 & 샌드박스</title>
+    <title>비밀 연구소: 화학식 방탈출 & 조립기 & 타임어택</title>
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -20,7 +20,7 @@
                 extend: {
                     fontFamily: { sans: ['Noto Sans KR', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
                     colors: {
-                        neon: { blue: '#00f3ff', green: '#39ff14', red: '#ff003c', yellow: '#ffe600', purple: '#b537f2' },
+                        neon: { blue: '#00f3ff', green: '#39ff14', red: '#ff003c', yellow: '#ffe600', purple: '#b537f2', orange: '#ff8c00' },
                         dark: { 900: '#0a0a0f', 800: '#12121c', 700: '#1a1a2e' }
                     },
                     animation: { 'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite', 'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both', 'scan': 'scan 2s linear infinite' },
@@ -46,6 +46,7 @@
         .text-glow-red { text-shadow: 0 0 10px rgba(255, 0, 60, 0.7), 0 0 20px rgba(255, 0, 60, 0.5); }
         .text-glow-green { text-shadow: 0 0 10px rgba(57, 255, 20, 0.7), 0 0 20px rgba(57, 255, 20, 0.5); }
         .text-glow-purple { text-shadow: 0 0 10px rgba(181, 55, 242, 0.7), 0 0 20px rgba(181, 55, 242, 0.5); }
+        .text-glow-orange { text-shadow: 0 0 10px rgba(255, 140, 0, 0.7), 0 0 20px rgba(255, 140, 0, 0.5); }
         
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0a0a0f; }
@@ -68,15 +69,19 @@
 
     <script type="text/babel">
         // ==========================================
-        // 0. Sound & Haptic Manager (Vanilla JS)
+        // 0. 전역 유틸리티 (아래첨자 포맷팅 등)
         // ==========================================
+        // 화학식 문자열(H2O 등)의 숫자를 유니코드 아래첨자(H₂O)로 변환 (오개념 방지)
+        const formatFormula = (str) => {
+            if (!str) return "";
+            const subs = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+            return str.replace(/\d/g, m => subs[m]);
+        };
+
         class AudioManager {
             constructor() { this.ctx = null; }
             init() { 
-                if(!this.ctx) {
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    if(AudioContext) this.ctx = new AudioContext();
-                }
+                if(!this.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if(AC) this.ctx = new AC(); }
             }
             playTone(freq, type, duration, vol=0.1) {
                 if(!this.ctx) return;
@@ -93,6 +98,7 @@
             error() { this.init(); this.playTone(300, 'sawtooth', 0.2); this.vibrate([50,50,50]); }
             unlock() { this.init(); this.playTone(500, 'square', 0.1); setTimeout(()=>this.playTone(1000, 'square', 0.2), 100); this.vibrate([100,50,100]); }
             click() { this.init(); this.playTone(800, 'sine', 0.05, 0.05); }
+            combo(level) { this.init(); this.playTone(400 + (level*50), 'triangle', 0.1); }
             vibrate(pattern) { if(navigator.vibrate) { try { navigator.vibrate(pattern); }catch(e){} } }
         }
         const audio = new AudioManager();
@@ -110,14 +116,14 @@
         ];
 
         const QUIZ_POOL = [
-            { q: "물의 화학식은 H2O이다.", a: true, explain: "물 분자는 H 2개와 O 1개로 이뤄짐." },
-            { q: "이산화 탄소는 C 2개와 O 1개다.", a: false, explain: "CO2이므로 C 1개, O 2개입니다." },
+            { q: "물의 화학식은 H₂O이다.", a: true, explain: "물 분자는 H 2개와 O 1개로 이뤄짐." },
+            { q: "이산화 탄소는 C 2개와 O 1개다.", a: false, explain: "CO₂이므로 C 1개, O 2개입니다." },
             { q: "원자는 물질을 구성하는 기본 입자이다.", a: true, explain: "기본 입자는 원자입니다." },
             { q: "분자는 물질의 성질을 나타내는 가장 작은 입자이다.", a: true, explain: "성질을 지닌 독립 입자가 분자입니다." },
-            { q: "메테인의 화학식은 NH3이다.", a: false, explain: "메테인은 CH4, NH3는 암모니아입니다." },
+            { q: "메테인의 화학식은 NH₃이다.", a: false, explain: "메테인은 CH₄, NH₃는 암모니아입니다." },
             { q: "같은 원자로 이뤄져도 배열이 다르면 다른 물질이다.", a: true, explain: "다이아몬드와 흑연의 예가 있습니다." },
-            { q: "원소 기호 오른쪽 아래 숫자는 분자 총 개수다.", a: false, explain: "해당 원자의 개수를 의미합니다." },
-            { q: "산소 분자는 O2로 나타낸다.", a: true, explain: "산소 원자 2개가 결합합니다." },
+            { q: "화학식에서 원소 기호 오른쪽 아래 숫자는 분자 총 개수다.", a: false, explain: "아래첨자는 '해당 원자의 개수'를 의미합니다. 분자 개수는 앞에 큰 숫자로 적습니다." },
+            { q: "산소 분자는 O₂로 나타낸다.", a: true, explain: "산소 원자 2개가 결합합니다." },
             { q: "비활성 기체는 원자 1개가 곧 분자이다.", a: true, explain: "단원자 분자라고 부릅니다." },
             { q: "모든 분자는 두 개 이상의 원자로 이루어져 있다.", a: false, explain: "단원자 분자도 존재합니다." }
         ];
@@ -131,22 +137,40 @@
             { title: "과산화수소 (수소 2, 산소 2)", slots: [{ type: 'element', expected: "H" }, { type: 'number', expected: "2" }, { type: 'element', expected: "O" }, { type: 'number', expected: "2" }] },
         ];
 
+        // 타임어택: 교육적 오답(매력적인 함정)이 포함된 4지선다 풀
+        const TIME_ATTACK_POOL = [
+            { name: "물", formula: "H2O", distractors: ["HO2", "H2O2", "O2H", "H3O"] },
+            { name: "이산화 탄소", formula: "CO2", distractors: ["CO", "C2O", "CO3", "O2C"] },
+            { name: "메테인", formula: "CH4", distractors: ["C4H", "CH3", "C2H4", "NH3"] },
+            { name: "암모니아", formula: "NH3", distractors: ["N3H", "NH4", "NO3", "CH4"] },
+            { name: "산소 분자", formula: "O2", distractors: ["O", "O3", "H2O", "CO2"] },
+            { name: "질소 분자", formula: "N2", distractors: ["N", "N3", "NH3", "NO2"] },
+            { name: "과산화수소", formula: "H2O2", distractors: ["H2O", "HO2", "H2O3", "O2"] },
+            { name: "염화 나트륨", formula: "NaCl", distractors: ["Na2Cl", "NaCl2", "NaC", "NCl"] },
+            { name: "염화 수소", formula: "HCl", distractors: ["H2Cl", "HCl2", "HC", "H2C"] },
+            { name: "산화 구리", formula: "CuO", distractors: ["Cu2O", "CuO2", "Cu", "CO"] },
+            { name: "황화 수소", formula: "H2S", distractors: ["HS2", "HS", "H2SO4", "H2O"] },
+            { name: "산화 알루미늄", formula: "Al2O3", distractors: ["Al3O2", "AlO3", "Al2O", "AlO"] },
+            { name: "산화 마그네슘", formula: "MgO", distractors: ["Mg2O", "MgO2", "Mg", "MnO"] },
+            { name: "수산화 나트륨", formula: "NaOH", distractors: ["Na2OH", "NaO2H", "NaH", "KOH"] },
+            { name: "황산 구리", formula: "CuSO4", distractors: ["CuSO3", "Cu2SO4", "CuS", "CaSO4"] },
+            { name: "이산화 황", formula: "SO2", distractors: ["SO3", "S2O", "SO", "CO2"] },
+            { name: "수소 분자", formula: "H2", distractors: ["H", "H3", "He", "H2O"] },
+            { name: "염소 분자", formula: "Cl2", distractors: ["Cl", "C2", "HCl", "Cl3"] }
+        ];
+
         // ==========================================
         // 2. LocalStorage Wrapper
         // ==========================================
         const Storage = {
             save: (key, data) => localStorage.setItem(`chem_${key}`, JSON.stringify(data)),
-            load: (key, defaultData) => {
-                const item = localStorage.getItem(`chem_${key}`);
-                return item ? JSON.parse(item) : defaultData;
-            }
+            load: (key, defaultData) => { const item = localStorage.getItem(`chem_${key}`); return item ? JSON.parse(item) : defaultData; }
         };
 
         // ==========================================
         // 3. Canvas Engines (Vanilla JS)
         // ==========================================
         
-        // --- 3.1 3D 분자 모형 (방탈출 및 샌드박스용) ---
         class MoleculeVisualizer {
             constructor(canvas) {
                 this.canvas = canvas; this.ctx = canvas.getContext('2d');
@@ -159,8 +183,7 @@
             resize(w, h) { 
                 const dpr = window.devicePixelRatio || 1;
                 this.width = w; this.height = h; 
-                this.canvas.width = w * dpr; 
-                this.canvas.height = h * dpr; 
+                this.canvas.width = w * dpr; this.canvas.height = h * dpr; 
                 this.ctx.scale(dpr, dpr);
             }
             setupEvents() {
@@ -200,7 +223,6 @@
                 else if (type === 'Al2O3') { const o1=a(-1.2,0,0,'O'); const al1=a(-0.6,0.5,0,'Al'); const o2=a(0,0,0,'O'); const al2=a(0.6,-0.5,0,'Al'); const o3=a(1.2,0,0,'O'); b(o1,al1,2); b(al1,o2); b(o2,al2); b(al2,o3,2); }
                 else if (type === 'CuSO4') { const s=a(0,0,0,'S'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const cu=a(-1.6,1.6,-1.6,'Cu'); b(s,o1,2); b(s,o2,2); b(s,o3); b(s,o4); b(cu,o3); b(cu,o4); }
                 else if (type === 'KMnO4') { const mn=a(0,0,0,'Mn'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const k=a(-1.6,1.6,-1.6,'K'); b(mn,o1,2); b(mn,o2,2); b(mn,o3,2); b(mn,o4); b(k,o4); }
-                
                 this.angleX = Math.random() * Math.PI; this.angleY = Math.random() * Math.PI;
             }
             start() { if (!this.isAnimating) { this.isAnimating = true; this.animate(); } }
@@ -260,7 +282,6 @@
             }
         }
 
-        // --- 3.2 2D 조립기 공통 컴포넌트 ---
         class DraggableCard {
             constructor(text, type) {
                 this.text = text; this.type = type;
@@ -278,6 +299,7 @@
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
                 ctx.strokeStyle = this.type === 'number' ? '#00f3ff' : '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
                 ctx.fillStyle = this.textColor; ctx.font = this.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                // 숫자는 변환 없이 카드에 그대로 출력 (조립기 뷰)
                 ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
             }
             isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
@@ -301,7 +323,6 @@
             isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
         }
 
-        // --- 3.3 조립기 엔진 (탭1) ---
         class FormulaEngine {
             constructor(canvas, container, setAlert) {
                 this.canvas = canvas; this.ctx = canvas.getContext('2d');
@@ -495,38 +516,24 @@
             }
         }
 
-        // --- 3.4 샌드박스 엔진 (탭3) ---
         class SandboxEngine extends FormulaEngine {
             constructor(canvas, container, setAlert, open3DModal) {
-                super(canvas, container, setAlert);
-                this.open3DModal = open3DModal;
-                this.missionBtns = []; 
+                super(canvas, container, setAlert); this.open3DModal = open3DModal; this.missionBtns = []; 
             }
-
             init() {
-                const elements = ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'S', 'Cl', 'Cu', 'K', 'Mn'];
-                elements.forEach(el => this.cards.push(new DraggableCard(el, 'element')));
-                const numbers = ['1', '1', '2', '2', '3', '3', '4', '4'];
-                numbers.forEach(num => this.cards.push(new DraggableCard(num, 'number')));
-                
+                const elements = ['H', 'He', 'C', 'N', 'O', 'Na', 'Mg', 'Al', 'Si', 'S', 'Cl', 'Cu', 'K', 'Mn']; elements.forEach(el => this.cards.push(new DraggableCard(el, 'element')));
+                const numbers = ['1', '1', '2', '2', '3', '3', '4', '4']; numbers.forEach(num => this.cards.push(new DraggableCard(num, 'number')));
                 this.setupResize(); this.setupEvents();
                 this.currentSlots = [new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number'), new Slot('element'), new Slot('number')];
-                this.updateLayout();
-                this.isAnimating = true; this.renderLoop();
+                this.updateLayout(); this.isAnimating = true; this.renderLoop();
             }
-
             updateLayout() {
                 const padding = this.isMobile ? 10 : 30;
                 const eW = this.isMobile ? Math.min(45, (this.CW - padding*2)/7 - 5) : 50; const eH = this.isMobile ? eW * 1.4 : 70;
                 const nW = this.isMobile ? Math.min(30, (this.CW - padding*2)/8 - 5) : 35; const nH = this.isMobile ? nW : 35;
                 this.elemFont = `bold ${this.isMobile ? 18 : 24}px "Noto Sans KR"`; this.numFont = `bold ${this.isMobile ? 14 : 20}px "Noto Sans KR"`;
 
-                this.layout = {
-                    titleY: 40,
-                    boxX: padding, boxY: 80, boxW: this.CW - padding*2, boxH: this.isMobile ? eH + 30 : 100,
-                    slotBaseY: 95,
-                };
-
+                this.layout = { titleY: 40, boxX: padding, boxY: 80, boxW: this.CW - padding*2, boxH: this.isMobile ? eH + 30 : 100, slotBaseY: 95 };
                 if (this.isMobile) {
                     this.btnSubmit = { x: (this.CW - 140)/2, y: this.layout.boxY + this.layout.boxH + 10, w: 140, h: 45 };
                     this.layout.lineY = this.btnSubmit.y + 65; this.layout.guideY = this.layout.lineY + 20;
@@ -537,19 +544,11 @@
 
                 let elems = this.cards.filter(c => c.type === 'element'); let nums = this.cards.filter(c => c.type === 'number');
                 elems.forEach(c => { c.width = eW; c.height = eH; c.font = this.elemFont; }); nums.forEach(c => { c.width = nW; c.height = nH; c.font = this.numFont; });
-
                 const eCols = this.isMobile ? 7 : 14; const eGap = (this.CW - padding*2 - eCols*eW) / (eCols-1); const eStartY = this.layout.guideY + 20;
-                elems.forEach((c, i) => {
-                    c.originX = padding + (i % eCols) * (eW + eGap); c.originY = eStartY + Math.floor(i / eCols) * (eH + 10);
-                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
-                });
+                elems.forEach((c, i) => { c.originX = padding + (i % eCols) * (eW + eGap); c.originY = eStartY + Math.floor(i / eCols) * (eH + 10); if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition(); });
                 const nStartY = eStartY + Math.ceil(elems.length / eCols) * (eH + 10) + (this.isMobile ? 10 : 20);
                 const nCols = 8; const nGap = (this.CW - padding*2 - nCols*nW) / (nCols-1);
-                nums.forEach((c, i) => {
-                    c.originX = padding + (i % nCols) * (nW + nGap); c.originY = nStartY + Math.floor(i / nCols) * (nH + 10);
-                    if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition();
-                });
-
+                nums.forEach((c, i) => { c.originX = padding + (i % nCols) * (nW + nGap); c.originY = nStartY + Math.floor(i / nCols) * (nH + 10); if(!this.currentSlots.some(s => s.placedCard === c) && !c.isDragging) c.resetPosition(); });
                 if (this.currentSlots.length > 0) {
                     let tW = 0; const sGap = 10;
                     this.currentSlots.forEach(s => { s.width = s.type === 'element' ? eW : nW; s.height = s.type === 'element' ? eH : nH; tW += s.width + sGap; });
@@ -557,107 +556,54 @@
                     this.currentSlots.forEach(s => { s.x = cX; s.y = this.layout.slotBaseY + (s.type === 'number' ? eH - nH : 0); cX += s.width + sGap; });
                 }
             }
-
             setupEvents() {
                 const onDown = (e) => {
                     if (e.target !== this.canvas) return; e.preventDefault(); const pos = this.getPos(e);
-                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) {
-                        this.synthesize(); return;
-                    }
+                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) { this.synthesize(); return; }
                     for (let i = this.cards.length - 1; i >= 0; i--) {
                         let c = this.cards[i];
-                        if (c.isPointInside(pos.x, pos.y)) {
-                            audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y};
-                            this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; });
-                            this.cards.splice(i, 1); this.cards.push(c); break;
-                        }
+                        if (c.isPointInside(pos.x, pos.y)) { audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y}; this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; }); this.cards.splice(i, 1); this.cards.push(c); break; }
                     }
                 };
                 const onMove = (e) => { if(!this.draggingCard) return; e.preventDefault(); const p = this.getPos(e); this.draggingCard.x = p.x - this.dragOffset.x; this.draggingCard.y = p.y - this.dragOffset.y; };
                 const onUp = (e) => {
-                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false;
-                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
-                    for (let s of this.currentSlots) {
-                        if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) {
-                            s.placedCard = this.draggingCard; drop = true; break;
-                        }
-                    }
-                    if (!drop) this.draggingCard.resetPosition();
-                    this.draggingCard = null;
+                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false; let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    for (let s of this.currentSlots) { if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; } }
+                    if (!drop) this.draggingCard.resetPosition(); this.draggingCard = null;
                 };
                 this.canvas.addEventListener('mousedown', onDown); this.canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
                 this.canvas.addEventListener('touchstart', onDown, {passive: false}); this.canvas.addEventListener('touchmove', onMove, {passive: false}); window.addEventListener('touchend', onUp);
                 this._e = {onDown, onMove, onUp, handleResize: this._e.handleResize};
             }
-
             synthesize() {
-                let formulaStr = "";
-                this.currentSlots.forEach(s => {
-                    if(s.placedCard) {
-                        if(s.type === 'number' && s.placedCard.text === '1') return; // 숫자 1은 생략 취급
-                        formulaStr += s.placedCard.text;
-                    }
-                });
-                
-                if(formulaStr === "") {
-                    audio.error(); this.setAlert({ isOpen: true, msg: "카드를 슬롯에 배치해 주세요."}); return;
-                }
-
-                const SUPPORTED_3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
-                const VALID_NO_3D = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
-
-                if (SUPPORTED_3D.includes(formulaStr)) {
-                    audio.success();
-                    this.open3DModal(formulaStr);
-                } else if (VALID_NO_3D.includes(formulaStr)) {
-                    audio.success();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` });
-                } else if (formulaStr.includes('He') && formulaStr !== 'He') {
-                    audio.error();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 18족 '비활성 기체'로 이미 안정하여 다른 원소와 결합하지 않습니다.` });
-                } else if (['H','N','O','Cl'].includes(formulaStr)) {
-                    audio.error();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O2, H2 등)로 존재합니다.`});
-                } else if (['He','C','Cu','Na','Mg','Al','Si','S','K','Mn'].includes(formulaStr)) {
-                    audio.success();
-                    this.setAlert({ isOpen: true, msg: `[ ${formulaStr} ]\n이것은 분자가 아니라 단일 '원소' 입니다.`});
-                } else {
-                    audio.click();
-                    this.setAlert({ 
-                        isOpen: true, 
-                        msg: `[ ${formulaStr} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` 
-                    });
-                }
+                let formulaStr = ""; this.currentSlots.forEach(s => { if(s.placedCard) { if(s.type === 'number' && s.placedCard.text === '1') return; formulaStr += s.placedCard.text; } });
+                if(formulaStr === "") { audio.error(); this.setAlert({ isOpen: true, msg: "카드를 슬롯에 배치해 주세요."}); return; }
+                const S3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
+                const VNO = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
+                if (S3D.includes(formulaStr)) { audio.success(); this.open3DModal(formulaStr); } 
+                else if (VNO.includes(formulaStr)) { audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` }); } 
+                else if (formulaStr.includes('He') && formulaStr !== 'He') { audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 18족 '비활성 기체'로 이미 안정하여 다른 원소와 결합하지 않습니다.` }); } 
+                else if (['H','N','O','Cl'].includes(formulaStr)) { audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O₂, H₂ 등)로 존재합니다.`}); } 
+                else if (['He','C','Cu','Na','Mg','Al','Si','S','K','Mn'].includes(formulaStr)) { audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n이것은 분자가 아니라 단일 '원소' 입니다.`}); } 
+                else { audio.click(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` }); }
             }
-
             renderLoop() {
                 if (!this.isAnimating) return;
                 this.ctx.fillStyle = '#12121c'; this.ctx.fillRect(0, 0, this.CW, this.CH);
                 this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 16px "Noto Sans KR"'; this.ctx.textAlign = 'left'; this.ctx.textBaseline = 'top'; this.ctx.fillText("🔬 자유 연구실 (샌드박스)", 15, 15);
-
-                this.ctx.fillStyle = '#fff'; this.ctx.font = `bold ${this.isMobile?16:20}px "Noto Sans KR"`; this.ctx.textAlign = 'center';
-                this.ctx.fillText("원하는 화학식을 자유롭게 합성해 보세요", this.CW/2, this.layout.titleY);
-
+                this.ctx.fillStyle = '#fff'; this.ctx.font = `bold ${this.isMobile?16:20}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; this.ctx.fillText("원하는 분자를 자유롭게 합성해 보세요", this.CW/2, this.layout.titleY);
                 this.ctx.fillStyle = 'rgba(181,55,242,0.02)'; this.ctx.fillRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
                 this.ctx.strokeStyle = 'rgba(181,55,242,0.3)'; this.ctx.lineWidth=2; this.ctx.strokeRect(this.layout.boxX, this.layout.boxY, this.layout.boxW, this.layout.boxH);
-
                 this.currentSlots.forEach(s => s.draw(this.ctx));
                 this.ctx.beginPath(); this.ctx.moveTo(this.layout.boxX, this.layout.lineY); this.ctx.lineTo(this.CW-this.layout.boxX, this.layout.lineY); this.ctx.strokeStyle='#334155'; this.ctx.stroke();
-                
-                this.ctx.fillStyle = '#94a3b8'; this.ctx.font = `bold ${this.isMobile?14:16}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; 
-                this.ctx.fillText("기호와 숫자 카드로 화학식을 완성하세요", this.CW/2, this.layout.guideY);
-
+                this.ctx.fillStyle = '#94a3b8'; this.ctx.font = `bold ${this.isMobile?14:16}px "Noto Sans KR"`; this.ctx.textAlign = 'center'; this.ctx.fillText("기호와 숫자 카드로 화학식을 완성하세요", this.CW/2, this.layout.guideY);
                 this.cards.forEach(c => { if (!this.currentSlots.some(s => s.placedCard===c) || c.isDragging) c.draw(this.ctx); });
-
                 this.ctx.fillStyle = 'rgba(181,55,242,0.1)'; this.ctx.beginPath(); this.ctx.roundRect(this.btnSubmit.x, this.btnSubmit.y, this.btnSubmit.w, this.btnSubmit.h, 8); this.ctx.fill();
                 this.ctx.strokeStyle = '#b537f2'; this.ctx.lineWidth = 2; this.ctx.stroke();
-                this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 18px "Noto Sans KR"'; this.ctx.textAlign='center'; this.ctx.textBaseline='middle';
-                this.ctx.fillText("합성 (Synthesize)", this.btnSubmit.x+this.btnSubmit.w/2, this.btnSubmit.y+this.btnSubmit.h/2);
-
+                this.ctx.fillStyle = '#b537f2'; this.ctx.font = 'bold 18px "Noto Sans KR"'; this.ctx.textAlign='center'; this.ctx.textBaseline='middle'; this.ctx.fillText("합성 (Synthesize)", this.btnSubmit.x+this.btnSubmit.w/2, this.btnSubmit.y+this.btnSubmit.h/2);
                 this.animationFrame = requestAnimationFrame(() => this.renderLoop());
             }
         }
-
 
         // ==========================================
         // 4. React 컴포넌트
@@ -691,9 +637,9 @@
             const handleDel = () => { audio.click(); setPin(p => p.slice(0, -1)); };
             if (!isOpen) return null;
             
-            const isPurple = targetTab === 'sandbox';
-            const colorClass = isPurple ? 'text-neon-purple' : 'text-neon-red';
-            const shadowClass = isPurple ? 'shadow-[0_0_20px_rgba(181,55,242,0.3)]' : 'shadow-[0_0_20px_rgba(255,0,60,0.3)]';
+            let colorClass = 'text-neon-red'; let shadowClass = 'shadow-[0_0_20px_rgba(255,0,60,0.3)]'; let dotClass = '';
+            if (targetTab === 'sandbox') { colorClass = 'text-neon-purple'; shadowClass = 'shadow-[0_0_20px_rgba(181,55,242,0.3)]'; dotClass = '!bg-neon-purple !shadow-[0_0_10px_#b537f2] !border-neon-purple'; }
+            if (targetTab === 'timeattack') { colorClass = 'text-neon-orange'; shadowClass = 'shadow-[0_0_20px_rgba(255,140,0,0.3)]'; dotClass = '!bg-neon-orange !shadow-[0_0_10px_#ff8c00] !border-neon-orange'; }
 
             return (
                 <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 backdrop-blur-md px-4">
@@ -702,7 +648,7 @@
                         <h2 className={`text-xl font-bold mb-2 ${colorClass}`}>SECURITY CLEARANCE</h2>
                         <p className="text-gray-400 text-sm mb-6">지도교사의 접근 승인 코드를 입력하세요.</p>
                         <div className="flex justify-center gap-4 mb-8">
-                            {[0,1,2,3].map(i => <div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''} ${isPurple && i < pin.length ? '!bg-neon-purple !shadow-[0_0_10px_#b537f2] !border-neon-purple' : ''}`}></div>)}
+                            {[0,1,2,3].map(i => <div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''} ${i < pin.length ? dotClass : ''}`}></div>)}
                         </div>
                         <div className="grid grid-cols-3 gap-4 justify-items-center mb-6">
                             {[1,2,3,4,5,6,7,8,9].map(n => <button key={n} onClick={()=>handleNum(n.toString())} className="pin-btn">{n}</button>)}
@@ -718,11 +664,42 @@
         const AdminGuideModal = ({ isOpen, onClose }) => {
             const [copied, setCopied] = useState(false);
             if (!isOpen) return null;
-            const scriptCode = `function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+            const scriptCode = `function getOrCreateSheet(sheetName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    if (sheetName === "방탈출") sheet.appendRow(["제출일시", "학번", "이름", "탈출시간(초)", "퀴즈점수", "알게된점"]);
+    else if (sheetName === "타임어택") sheet.appendRow(["제출일시", "학번", "이름", "점수", "최대콤보"]);
+  }
+  return sheet;
+}
+
+function doPost(e) {
   var data = JSON.parse(e.postData.contents);
-  sheet.appendRow([data.timestamp, data.studentId, data.studentName, data.escapeTime, data.quizScore, data.insight]);
+  var sheetName = data.type === 'timeattack' ? "타임어택" : "방탈출";
+  var sheet = getOrCreateSheet(sheetName);
+  
+  if (data.type === 'timeattack') sheet.appendRow([data.timestamp, data.studentId, data.studentName, data.score, data.maxCombo]);
+  else sheet.appendRow([data.timestamp, data.studentId, data.studentName, data.escapeTime, data.quizScore, data.insight]);
+  
   return ContentService.createTextOutput(JSON.stringify({"result":"success"})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("타임어택");
+  if (!sheet) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
+  
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
+  
+  var records = [];
+  for (var i = 1; i < data.length; i++) {
+    records.push({ timestamp: data[i][0], studentId: data[i][1], studentName: data[i][2], score: Number(data[i][3]), maxCombo: Number(data[i][4]) });
+  }
+  records.sort(function(a, b) { return b.score - a.score; });
+  return ContentService.createTextOutput(JSON.stringify(records.slice(0, 10))).setMimeType(ContentService.MimeType.JSON);
 }`;
             const handleCopy = () => {
                 audio.click();
@@ -732,9 +709,7 @@
                     document.body.removeChild(t);
                 };
                 if(navigator.clipboard && window.isSecureContext) { 
-                    navigator.clipboard.writeText(scriptCode)
-                    .then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); })
-                    .catch(err => { fallbackCopy(); }); 
+                    navigator.clipboard.writeText(scriptCode).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); }).catch(err => { fallbackCopy(); }); 
                 } else { fallbackCopy(); }
             };
 
@@ -743,15 +718,15 @@
                     <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border-gray-600 relative">
                         <button onClick={()=>{audio.click(); onClose();}} className="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl font-bold">&times;</button>
                         <div className="p-6 md:p-8">
-                            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><span className="text-2xl">⚙️</span> 교사 DB 연동 가이드</h2>
+                            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><span className="text-2xl">⚙️</span> 교사 DB 연동 가이드 V3</h2>
                             <div className="space-y-6 text-sm md:text-base text-gray-300">
                                 <div className="bg-dark-800 p-4 rounded-lg border border-gray-700">
                                     <h3 className="text-white font-bold mb-2">1. 구글 스프레드시트 준비</h3>
-                                    <code className="block mt-2 text-neon-blue bg-black p-2 rounded">제출일시 | 학번 | 이름 | 탈출시간(초) | 퀴즈점수 | 알게된점</code>
+                                    <p>새 구글 시트를 만들기만 하면 끝! (Apps Script가 데이터 수신 시 알아서 '방탈출'과 '타임어택' 탭을 만들고 헤더를 생성합니다.)</p>
                                 </div>
                                 <div className="bg-dark-800 p-4 rounded-lg border border-gray-700">
                                     <div className="flex justify-between items-center mb-2">
-                                        <h3 className="text-white font-bold">2. Apps Script 적용</h3>
+                                        <h3 className="text-white font-bold">2. Apps Script 전체 코드 적용</h3>
                                         <button onClick={handleCopy} className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white">{copied ? '복사 완료!' : '코드 복사'}</button>
                                     </div>
                                     <pre className="bg-black p-3 rounded overflow-x-auto text-green-400 text-xs font-mono select-all">{scriptCode}</pre>
@@ -777,7 +752,7 @@
                 <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80 backdrop-blur-md px-4 pointer-events-auto" onClick={onClose}>
                     <div className="glass-panel p-6 rounded-3xl w-full max-w-sm text-center border-neon-purple shadow-[0_0_30px_rgba(181,55,242,0.3)] bg-[#12121c]" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-2xl font-black text-neon-purple mb-2">합성 성공!</h2>
-                        <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl">{molecule} 분자식 확인</div>
+                        <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl">{formatFormula(molecule)} 분자식 확인</div>
                         <div className="w-[300px] h-[300px] mx-auto bg-black rounded-2xl overflow-hidden mb-4 cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
                         <p className="text-gray-400 text-sm mb-4">드래그하여 3D 구조를 확인하세요.</p>
                         <button onClick={()=>{audio.click(); onClose();}} className="w-full py-4 bg-neon-purple/20 text-neon-purple border border-neon-purple rounded-xl font-bold hover:bg-neon-purple/30 transition-colors active:scale-95">확인했습니다</button>
@@ -816,7 +791,7 @@
         };
 
         const EscapeIntroView = ({ onStart }) => (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 relative bg-dark-900">
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(57,255,20,0.05)_0,transparent_50%)]"></div>
                 <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-green">
                     <h1 className="text-3xl md:text-5xl font-black mb-4 text-glow-green tracking-tight">비밀 연구소<br/>방탈출</h1>
@@ -836,7 +811,6 @@
             const currentLevel = ESCAPE_ROOM_LEVELS[levelIdx];
 
             useEffect(() => { timerRef.current = setInterval(() => { setElapsedTime(p => { const nt = p + 1; Storage.save('e_time', nt); return nt; }); }, 1000); return () => clearInterval(timerRef.current); }, []);
-
             useEffect(() => {
                 if (canvasRef.current && !rendererRef.current) {
                     rendererRef.current = new MoleculeVisualizer(canvasRef.current);
@@ -845,7 +819,6 @@
                     return () => { window.removeEventListener('resize', handleResize); rendererRef.current.stop(); };
                 }
             }, []);
-
             useEffect(() => { setInputValue(""); setShowHint(false); if (rendererRef.current && !isSolved) { rendererRef.current.atoms = []; rendererRef.current.bonds = []; } }, [levelIdx, isSolved]);
 
             const handleSubmit = (e) => {
@@ -858,15 +831,12 @@
 
             const handleNextLevel = () => {
                 audio.click();
-                if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { 
-                    setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); 
-                } else { 
-                    clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); 
-                }
+                if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); } 
+                else { clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); }
             }
 
             return (
-                <div className="flex-1 flex flex-col md:flex-row relative bg-dark-900">
+                <div className="absolute inset-0 flex flex-col md:flex-row bg-dark-900">
                     <div className="md:w-1/3 p-6 flex flex-col justify-between z-10 glass-panel md:rounded-none md:border-y-0 md:border-l-0 border-r border-gray-800">
                         <div>
                             <div className="text-xl font-mono text-cyan-400 font-bold mb-8">TIMER <span className="text-white ml-2">{Math.floor(elapsedTime/60).toString().padStart(2,'0')}:{(elapsedTime%60).toString().padStart(2,'0')}</span></div>
@@ -890,9 +860,7 @@
                             <div className="absolute inset-0 z-30 flex flex-col items-center justify-between py-10 pointer-events-none">
                                 <div className="flex flex-col items-center px-4 text-center">
                                     <div className={`text-3xl md:text-5xl font-black mb-4 ${currentLevel.color} drop-shadow-[0_0_20px_currentColor]`}>ACCESS GRANTED</div>
-                                    <div className="text-gray-300 text-sm md:text-base font-bold bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-700">
-                                        화면을 드래그하여 분자의 구조를 관찰하세요
-                                    </div>
+                                    <div className="text-gray-300 text-sm md:text-base font-bold bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-700">화면을 드래그하여 구조 관찰</div>
                                 </div>
                                 <button onClick={handleNextLevel} className="pointer-events-auto mt-4 mx-4 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-2xl text-lg md:text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] transition-transform active:scale-95">
                                     {levelIdx < ESCAPE_ROOM_LEVELS.length - 1 ? '다음 구역으로 이동 ➔' : '방탈출 성공! 보고서 쓰기 ➔'}
@@ -952,7 +920,7 @@
         };
 
         const EscapeDoneView = ({ onRestart }) => (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-dark-900">
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-dark-900">
                 <div className="glass-panel p-8 md:p-10 rounded-3xl max-w-md w-full border-t-4 border-t-neon-blue">
                     <h2 className="text-2xl md:text-3xl font-black text-white mb-4 text-glow-blue">보고서 제출 완료!</h2>
                     <p className="text-gray-300 mb-8">지구 환경을 위한 데이터가 서버에 기록되었습니다.</p>
@@ -966,12 +934,12 @@
             const submitData = async (formData) => {
                 if (!GOOGLE_SCRIPT_URL) return setGlobalAlert({ isOpen: true, msg: "DB 연동 오류! GOOGLE_SCRIPT_URL을 설정하세요." });
                 try {
-                    await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, escapeTime: stats.escapeTime, timestamp: new Date().toLocaleString()}) });
+                    await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, escapeTime: stats.escapeTime, timestamp: new Date().toLocaleString(), type: 'escape' }) });
                     Storage.save('e_level', 0); Storage.save('e_time', 0); setView('done');
                 } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); }
             };
             return (
-                <div className="flex-1 flex flex-col w-full h-full relative">
+                <div className="flex-1 w-full h-full relative">
                     {view === 'intro' && <EscapeIntroView onStart={() => setView('simulation')} />}
                     {view === 'simulation' && <EscapeSimulationView onFinish={() => setView('report')} stats={stats} setStats={setStats} />}
                     {view === 'report' && <EscapeReportView onSubmit={submitData} escapeTime={stats.escapeTime} setGlobalAlert={setGlobalAlert} />}
@@ -980,9 +948,193 @@
             );
         };
 
+        // --- 3.5 타임어택 (4지 선다형 개선 버전) ---
+        const TimeAttackIntroView = ({ onStart }) => (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.05)_0,transparent_50%)]"></div>
+                <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-orange">
+                    <h1 className="text-3xl md:text-5xl font-black mb-4 text-glow-orange tracking-tight">코어 안정화<br/>타임어택</h1>
+                    <p className="text-gray-300 mb-8 leading-relaxed font-medium">제한시간 60초!<br/>등장하는 물질의 정확한 화학식을 선택하여<br/>콤보를 쌓고 명예의 전당에 이름을 올리세요.</p>
+                    <button onClick={()=>{audio.click(); onStart();}} className="w-full py-4 px-6 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 text-white font-bold rounded-xl text-xl shadow-[0_0_20px_rgba(255,140,0,0.4)] active:scale-95">도전 시작하기</button>
+                </div>
+            </div>
+        );
+
+        const TimeAttackGameView = ({ onFinish }) => {
+            const [timeLeft, setTimeLeft] = useState(60);
+            const [score, setScore] = useState(0);
+            const [combo, setCombo] = useState(0);
+            const [maxCombo, setMaxCombo] = useState(0);
+            
+            const [currentQ, setCurrentQ] = useState(null);
+            const [choices, setChoices] = useState([]);
+            const [isShake, setIsShake] = useState(false);
+            const [isSuccess, setIsSuccess] = useState(false);
+
+            useEffect(() => { getNewQ(null); }, []);
+
+            useEffect(() => {
+                if(timeLeft <= 0) { audio.error(); onFinish(score, maxCombo); return; }
+                const timer = setInterval(()=>setTimeLeft(p=>p-1), 1000);
+                return () => clearInterval(timer);
+            }, [timeLeft]);
+
+            const getNewQ = (prevName) => {
+                let q;
+                do { q = TIME_ATTACK_POOL[Math.floor(Math.random() * TIME_ATTACK_POOL.length)]; } while(q && prevName && q.name === prevName);
+                
+                // 오답 3개 섞기
+                const shuffledDistractors = [...q.distractors].sort(() => 0.5 - Math.random()).slice(0, 3);
+                // 정답 포함 4개 보기 섞기
+                const newChoices = [q.formula, ...shuffledDistractors].sort(() => 0.5 - Math.random());
+                
+                setCurrentQ(q);
+                setChoices(newChoices);
+            };
+
+            const handleChoice = (selectedFormula) => {
+                if(!currentQ) return;
+                
+                if(selectedFormula === currentQ.formula) {
+                    const newCombo = combo + 1; setCombo(newCombo);
+                    if(newCombo > maxCombo) setMaxCombo(newCombo);
+                    const multiplier = 1 + Math.floor(newCombo / 5) * 0.5; 
+                    setScore(p => p + Math.floor(100 * multiplier));
+                    
+                    audio.combo(Math.min(newCombo, 10)); 
+                    setIsSuccess(true); setTimeout(()=>setIsSuccess(false), 300);
+                    getNewQ(currentQ.name);
+                } else {
+                    audio.error();
+                    setCombo(0);
+                    setIsShake(true); setTimeout(()=>setIsShake(false), 500);
+                }
+            };
+
+            return (
+                <div className="absolute inset-0 flex flex-col bg-[#12121c] p-4 md:p-8 overflow-hidden">
+                    {/* 상단 스탯 */}
+                    <div className="flex justify-between items-center bg-dark-800 p-4 rounded-2xl border border-gray-700 mb-6 shrink-0">
+                        <div className={`text-2xl md:text-4xl font-bold font-mono ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-neon-orange'}`}>
+                            {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
+                        </div>
+                        <div className="text-right">
+                            <div className="text-xl md:text-3xl font-black text-neon-blue">{score.toLocaleString()} PTS</div>
+                            <div className={`text-sm md:text-base font-bold transition-colors ${combo > 0 ? 'text-neon-green' : 'text-gray-500'}`}>{combo} COMBO</div>
+                        </div>
+                    </div>
+
+                    {/* 문제 & 4지선다 영역 */}
+                    <div className={`flex-1 flex flex-col justify-center items-center ${isShake ? 'animate-shake' : ''}`}>
+                        <div className="text-neon-orange font-bold mb-4 tracking-widest text-sm md:text-base">TARGET MOLECULE</div>
+                        <div className={`text-4xl md:text-6xl font-black mb-12 text-white transition-all ${isSuccess ? 'scale-110 text-neon-green text-glow-green' : ''}`}>
+                            {currentQ?.name}
+                        </div>
+                        
+                        <div className="w-full max-w-lg mx-auto grid grid-cols-2 gap-4 pb-8 px-2">
+                            {choices.map((choice, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => handleChoice(choice)}
+                                    className="py-8 md:py-10 bg-dark-800 border-2 border-gray-600 hover:border-neon-orange hover:bg-dark-700 text-white font-sans text-3xl md:text-4xl font-bold rounded-2xl shadow-[0_4px_15px_rgba(0,0,0,0.3)] transition-transform active:scale-95 flex items-center justify-center tracking-wider"
+                                >
+                                    {formatFormula(choice)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TimeAttackSubmitView = ({ score, maxCombo, onSubmit, setGlobalAlert }) => {
+            const [form, setForm] = useState({ studentId: '', studentName: '' });
+            const handleSubmit = () => {
+                if (!form.studentId.trim() || !form.studentName.trim()) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "학번과 이름을 입력해주세요." }); }
+                audio.success();
+                onSubmit({ ...form, score, maxCombo });
+            };
+            return (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900">
+                    <div className="glass-panel p-8 rounded-3xl w-full max-w-md text-center border-t-4 border-t-neon-orange">
+                        <h2 className="text-3xl font-black text-white mb-2">TIME OVER</h2>
+                        <div className="text-5xl font-black text-neon-orange text-glow-orange my-6">{score.toLocaleString()}</div>
+                        <div className="text-gray-400 mb-8 font-mono">MAX COMBO: {maxCombo}</div>
+                        
+                        <div className="space-y-4 mb-8">
+                            <input type="text" placeholder="학번" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} />
+                            <input type="text" placeholder="이름" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} />
+                        </div>
+                        <button onClick={handleSubmit} className="w-full py-5 bg-gradient-to-r from-orange-600 to-red-600 text-white font-black rounded-xl text-xl active:scale-95 shadow-[0_0_15px_rgba(255,140,0,0.4)]">랭킹에 등록하기</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const TimeAttackLeaderboardView = ({ onRestart, setGlobalAlert }) => {
+            const [ranks, setRanks] = useState([]); const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if(!GOOGLE_SCRIPT_URL) { setLoading(false); return; }
+                fetch(GOOGLE_SCRIPT_URL)
+                    .then(res => res.json())
+                    .then(data => { setRanks(data); setLoading(false); })
+                    .catch(err => { setLoading(false); });
+            }, []);
+
+            return (
+                <div className="absolute inset-0 flex flex-col p-4 md:p-8 bg-dark-900 overflow-y-auto">
+                    <div className="w-full max-w-lg mx-auto glass-panel rounded-3xl p-6 md:p-8 border-t-4 border-t-neon-yellow">
+                        <h2 className="text-3xl font-black text-white mb-6 text-center text-glow-yellow">🏆 명예의 전당</h2>
+                        {loading ? (
+                            <div className="flex flex-col items-center py-20 text-neon-yellow"><div className="w-12 h-12 border-4 border-gray-700 border-t-neon-yellow rounded-full animate-spin mb-4"></div><div>랭킹 데이터를 불러오는 중...</div></div>
+                        ) : ranks.length === 0 ? (
+                            <div className="text-center py-20 text-gray-500">아직 등록된 랭킹이 없습니다.<br/>첫 번째 기록을 세워보세요!</div>
+                        ) : (
+                            <div className="space-y-3 mb-8">
+                                {ranks.map((r, i) => (
+                                    <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${i===0 ? 'bg-yellow-500/20 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.2)]' : i===1 ? 'bg-gray-300/20 border-gray-300/50' : i===2 ? 'bg-orange-600/20 border-orange-600/50' : 'bg-dark-800 border-gray-700'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`font-black text-2xl w-6 text-center ${i===0?'text-yellow-400':i===1?'text-gray-300':i===2?'text-orange-500':'text-gray-500'}`}>{i+1}</div>
+                                            <div>
+                                                <div className="font-bold text-white text-lg">{r.studentName} <span className="text-sm text-gray-500 font-normal ml-2">{r.studentId}</span></div>
+                                                <div className="text-sm text-gray-400 font-mono mt-1">Max {r.maxCombo} Combo</div>
+                                            </div>
+                                        </div>
+                                        <div className="font-black font-mono text-2xl text-neon-blue">{r.score.toLocaleString()}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <button onClick={()=>{audio.click(); onRestart();}} className="w-full py-5 bg-dark-800 border border-gray-600 hover:bg-dark-700 text-white font-bold rounded-xl active:scale-95 text-lg">다시 도전하기</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const TimeAttackFlow = ({ setGlobalAlert }) => {
+            const [view, setView] = useState('intro'); const [gameResult, setGameResult] = useState({score:0, maxCombo:0});
+            const submitData = async (formData) => {
+                if (!GOOGLE_SCRIPT_URL) { setView('leaderboard'); return setGlobalAlert({ isOpen: true, msg: "DB URL이 설정되지 않아 랭킹을 불러올 수 없습니다."}); }
+                try {
+                    await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, timestamp: new Date().toLocaleString(), type: 'timeattack' }) });
+                    setView('leaderboard');
+                } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); setView('leaderboard'); }
+            };
+
+            return (
+                <div className="flex-1 w-full h-full relative overflow-hidden">
+                    {view === 'intro' && <TimeAttackIntroView onStart={() => setView('game')} />}
+                    {view === 'game' && <TimeAttackGameView onFinish={(s, mc) => { setGameResult({score:s, maxCombo:mc}); setView('submit'); }} />}
+                    {view === 'submit' && <TimeAttackSubmitView score={gameResult.score} maxCombo={gameResult.maxCombo} onSubmit={submitData} setGlobalAlert={setGlobalAlert} />}
+                    {view === 'leaderboard' && <TimeAttackLeaderboardView onRestart={()=>setView('intro')} setGlobalAlert={setGlobalAlert} />}
+                </div>
+            );
+        };
+
         const App = () => {
             const [activeTab, setActiveTab] = useState('formula'); 
-            const [unlockedTabs, setUnlockedTabs] = useState(Storage.load('unlocked', { escape: false, sandbox: false }));
+            const [unlockedTabs, setUnlockedTabs] = useState(Storage.load('unlocked', { escape: false, sandbox: false, timeattack: false }));
             const [alertData, setAlertData] = useState({ isOpen: false, msg: "" });
             const [isGuideOpen, setIsGuideOpen] = useState(false);
             const [pinModal, setPinModal] = useState({ isOpen: false, target: null, code: "" });
@@ -991,6 +1143,7 @@
                 if(tab === activeTab) return; audio.click();
                 if (tab === 'escape' && !unlockedTabs.escape) setPinModal({ isOpen: true, target: 'escape', code: '0070' });
                 else if (tab === 'sandbox' && !unlockedTabs.sandbox) setPinModal({ isOpen: true, target: 'sandbox', code: '0303' });
+                else if (tab === 'timeattack' && !unlockedTabs.timeattack) setPinModal({ isOpen: true, target: 'timeattack', code: '4444' });
                 else setActiveTab(tab);
             };
 
@@ -1006,25 +1159,29 @@
                     <AdminGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
                     <PinPadModal isOpen={pinModal.isOpen} targetTab={pinModal.target} correctPin={pinModal.code} onSuccess={handlePinSuccess} onClose={()=>setPinModal({isOpen:false, target:null, code:""})} />
                     
-                    <header className="z-50 bg-dark-900 border-b border-gray-800 flex justify-between items-center px-2 md:px-8 h-14 shrink-0 overflow-x-auto whitespace-nowrap">
-                        <div className="flex gap-2 md:gap-6 font-bold text-xs md:text-base h-full">
+                    <header className="z-50 bg-dark-900 border-b border-gray-800 flex justify-between items-center px-2 md:px-6 h-14 shrink-0 overflow-x-auto whitespace-nowrap">
+                        <div className="flex gap-1 md:gap-4 font-bold text-xs md:text-base h-full">
                             <button onClick={() => handleTabClick('formula')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'formula' ? 'text-neon-blue border-neon-blue drop-shadow-[0_0_8px_rgba(0,243,255,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
                                 🧪 <span className="hidden sm:inline">화학식 </span>조립기
                             </button>
                             <button onClick={() => handleTabClick('escape')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'escape' ? 'text-neon-green border-neon-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.escape ? '🔓' : '🔒'} <span className="hidden sm:inline">비밀 </span>연구소
+                                {unlockedTabs.escape ? '🔓' : '🔒'} 비밀 <span className="hidden sm:inline">연구소</span>
                             </button>
                             <button onClick={() => handleTabClick('sandbox')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'sandbox' ? 'text-neon-purple border-neon-purple drop-shadow-[0_0_8px_rgba(181,55,242,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.sandbox ? '🔬' : '🔒'} <span className="hidden sm:inline">자유 </span>샌드박스
+                                {unlockedTabs.sandbox ? '🔬' : '🔒'} 자유 <span className="hidden sm:inline">샌드박스</span>
+                            </button>
+                            <button onClick={() => handleTabClick('timeattack')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'timeattack' ? 'text-neon-orange border-neon-orange drop-shadow-[0_0_8px_rgba(255,140,0,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.timeattack ? '⏱️' : '🔒'} 타임<span className="hidden sm:inline">어택</span>
                             </button>
                         </div>
-                        <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-4">⚙️</button>
+                        <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-2">⚙️</button>
                     </header>
 
                     <main className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
                         {activeTab === 'formula' && <FormulaGameView setGlobalAlert={setAlertData} />}
                         {activeTab === 'escape' && <EscapeRoomFlow setGlobalAlert={setAlertData} />}
                         {activeTab === 'sandbox' && <SandboxView setGlobalAlert={setAlertData} />}
+                        {activeTab === 'timeattack' && <TimeAttackFlow setGlobalAlert={setAlertData} />}
                     </main>
                 </div>
             );
