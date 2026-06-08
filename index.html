@@ -71,7 +71,6 @@
         // ==========================================
         // 0. 전역 유틸리티 (아래첨자 포맷팅 등)
         // ==========================================
-        // 화학식 문자열(H2O 등)의 숫자를 유니코드 아래첨자(H₂O)로 변환 (오개념 방지)
         const formatFormula = (str) => {
             if (!str) return "";
             const subs = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
@@ -299,7 +298,7 @@
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
                 ctx.strokeStyle = this.type === 'number' ? '#00f3ff' : '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
                 ctx.fillStyle = this.textColor; ctx.font = this.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                // 숫자는 변환 없이 카드에 그대로 출력 (조립기 뷰)
+                // 조립기 카드는 직접 숫자를 맞춰보는 느낌을 위해 변환 없이 그대로 출력
                 ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
             }
             isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
@@ -578,14 +577,33 @@
             synthesize() {
                 let formulaStr = ""; this.currentSlots.forEach(s => { if(s.placedCard) { if(s.type === 'number' && s.placedCard.text === '1') return; formulaStr += s.placedCard.text; } });
                 if(formulaStr === "") { audio.error(); this.setAlert({ isOpen: true, msg: "카드를 슬롯에 배치해 주세요."}); return; }
-                const S3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
-                const VNO = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
-                if (S3D.includes(formulaStr)) { audio.success(); this.open3DModal(formulaStr); } 
-                else if (VNO.includes(formulaStr)) { audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` }); } 
-                else if (formulaStr.includes('He') && formulaStr !== 'He') { audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 18족 '비활성 기체'로 이미 안정하여 다른 원소와 결합하지 않습니다.` }); } 
-                else if (['H','N','O','Cl'].includes(formulaStr)) { audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O₂, H₂ 등)로 존재합니다.`}); } 
-                else if (['He','C','Cu','Na','Mg','Al','Si','S','K','Mn'].includes(formulaStr)) { audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n이것은 분자가 아니라 단일 '원소' 입니다.`}); } 
-                else { audio.click(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` }); }
+                
+                const SUPPORTED_3D = ['H2O', 'CO2', 'CH4', 'NH3', 'O2', 'N2', 'Al2O3', 'NaCl', 'MgO', 'HCl', 'CuO', 'SO2', 'H2S', 'CO', 'H2O2', 'CuSO4', 'KMnO4', 'KCl'];
+                const VALID_NO_3D = ['MgCl2', 'AlCl3', 'Na2O', 'K2O', 'MnO2', 'CCl4', 'SiCl4', 'CS2', 'SO3', 'CuCl2', 'Na2S', 'MgS', 'Al2S3', 'H2', 'Cl2', 'SiH4', 'NaOH', 'KOH', 'H2SO4', 'HNO3', 'KNO3'];
+                const CONTINUOUS_SOLIDS = ['C', 'Cu', 'Na', 'Mg', 'Al', 'Si', 'S', 'K', 'Mn'];
+                const MONATOMIC_GASES = ['He'];
+
+                if (SUPPORTED_3D.includes(formulaStr)) { 
+                    audio.success(); this.open3DModal(formulaStr); 
+                } 
+                else if (VALID_NO_3D.includes(formulaStr)) { 
+                    audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n(아쉽게도 이 분자의 3D 모형은 아직 연구소에 등록되지 않았습니다.)` }); 
+                } 
+                else if (CONTINUOUS_SOLIDS.includes(formulaStr)) {
+                    audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n💡 구리(Cu)같은 금속이나 탄소(C)로 이루어진 다이아몬드처럼, 수많은 원자가 연속적으로 배열되어 결합한 물질은 분자 단위로 나눌 수 없어 '원소 기호' 자체를 화학식으로 사용합니다.` });
+                }
+                else if (MONATOMIC_GASES.includes(formulaStr)) {
+                    audio.success(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n자연계에 존재하는 올바른 화학식입니다! 🎉\n\n💡 헬륨(He)과 같은 18족 비활성 기체는 이미 안정하여 다른 원소와 결합하지 않고, 원자 1개가 독립적으로 성질을 띠는 '단원자 분자'로 존재합니다.` });
+                }
+                else if (formulaStr.includes('He') && formulaStr !== 'He') { 
+                    audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n불가능한 조합입니다.\n\n💡 이유: He(헬륨)은 '비활성 기체'로 이미 매우 안정하여 다른 원소와 결합하지 않습니다.` }); 
+                } 
+                else if (['H','N','O','Cl'].includes(formulaStr)) { 
+                    audio.error(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n단독으로는 존재하기 어렵습니다.\n\n💡 이유: 수소(H), 질소(N), 산소(O), 염소(Cl) 등은 혼자서는 불안정하여 원자 2개가 결합한 분자 상태(예: O₂, H₂ 등)로 존재합니다.`}); 
+                } 
+                else { 
+                    audio.click(); this.setAlert({ isOpen: true, msg: `[ ${formatFormula(formulaStr)} ]\n연구소 데이터베이스에 없는 조합입니다.\n\n화학 결합 규칙에 어긋나는 물질일 수도 있고, 실제로 존재하지만 아직 DB에 등록되지 않은 물질일 수도 있습니다.\n\n이 물질이 진짜 존재하는지 인터넷에 직접 검색해 보는 요원이 되어 볼까요? 🧐` }); 
+                }
             }
             renderLoop() {
                 if (!this.isAnimating) return;
@@ -752,7 +770,7 @@ function doGet(e) {
                 <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80 backdrop-blur-md px-4 pointer-events-auto" onClick={onClose}>
                     <div className="glass-panel p-6 rounded-3xl w-full max-w-sm text-center border-neon-purple shadow-[0_0_30px_rgba(181,55,242,0.3)] bg-[#12121c]" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-2xl font-black text-neon-purple mb-2">합성 성공!</h2>
-                        <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl">{formatFormula(molecule)} 분자식 확인</div>
+                        <div className="text-white font-mono text-xl mb-4 bg-black/50 py-2 rounded-xl tracking-wider">{formatFormula(molecule)} 분자식 확인</div>
                         <div className="w-[300px] h-[300px] mx-auto bg-black rounded-2xl overflow-hidden mb-4 cursor-move"><canvas ref={canvasRef} className="w-full h-full block"></canvas></div>
                         <p className="text-gray-400 text-sm mb-4">드래그하여 3D 구조를 확인하세요.</p>
                         <button onClick={()=>{audio.click(); onClose();}} className="w-full py-4 bg-neon-purple/20 text-neon-purple border border-neon-purple rounded-xl font-bold hover:bg-neon-purple/30 transition-colors active:scale-95">확인했습니다</button>
@@ -901,12 +919,12 @@ function doGet(e) {
                                     <h3 className="font-bold text-neon-green text-lg">OX 퀴즈</h3>
                                     {quizzes.map((q, i) => (
                                         <div key={i} className={`p-5 rounded-2xl border ${showResults ? (answers[i] === q.a ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20') : 'border-gray-700 bg-dark-800'}`}>
-                                            <p className="mb-4 text-base md:text-lg leading-relaxed">{q.q}</p>
+                                            <p className="mb-4 text-base md:text-lg leading-relaxed">{formatFormula(q.q)}</p>
                                             <div className="flex gap-3">
                                                 <button onClick={() => handleAnswer(i, true)} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-colors ${answers[i] === true ? 'bg-blue-600 border-blue-400 text-white' : 'bg-dark-900 border-gray-600 text-gray-400'}`} disabled={showResults}>O</button>
                                                 <button onClick={() => handleAnswer(i, false)} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-colors ${answers[i] === false ? 'bg-red-600 border-red-400 text-white' : 'bg-dark-900 border-gray-600 text-gray-400'}`} disabled={showResults}>X</button>
                                             </div>
-                                            {showResults && <div className="mt-4 p-3 bg-black/40 rounded-lg text-sm md:text-base text-gray-300 border border-gray-700">{q.explain}</div>}
+                                            {showResults && <div className="mt-4 p-3 bg-black/40 rounded-lg text-sm md:text-base text-gray-300 border border-gray-700">{formatFormula(q.explain)}</div>}
                                         </div>
                                     ))}
                                 </div>
@@ -948,14 +966,15 @@ function doGet(e) {
             );
         };
 
-        // --- 3.5 타임어택 (4지 선다형 개선 버전) ---
-        const TimeAttackIntroView = ({ onStart }) => (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.05)_0,transparent_50%)]"></div>
-                <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-orange">
+        // --- 3.5 신규 타임어택 엔진 (탭4) ---
+        const TimeAttackIntroView = ({ onStart, onViewLeaderboard }) => (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-dark-900 overflow-y-auto">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.05)_0,transparent_50%)] pointer-events-none"></div>
+                <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-orange my-auto shrink-0">
                     <h1 className="text-3xl md:text-5xl font-black mb-4 text-glow-orange tracking-tight">코어 안정화<br/>타임어택</h1>
                     <p className="text-gray-300 mb-8 leading-relaxed font-medium">제한시간 60초!<br/>등장하는 물질의 정확한 화학식을 선택하여<br/>콤보를 쌓고 명예의 전당에 이름을 올리세요.</p>
-                    <button onClick={()=>{audio.click(); onStart();}} className="w-full py-4 px-6 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 text-white font-bold rounded-xl text-xl shadow-[0_0_20px_rgba(255,140,0,0.4)] active:scale-95">도전 시작하기</button>
+                    <button onClick={()=>{audio.click(); onStart();}} className="w-full py-4 px-6 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 text-white font-bold rounded-xl text-xl shadow-[0_0_20px_rgba(255,140,0,0.4)] active:scale-95 mb-4">도전 시작하기</button>
+                    <button onClick={()=>{audio.click(); onViewLeaderboard();}} className="w-full py-4 px-6 bg-dark-800 border border-gray-600 hover:bg-dark-700 text-gray-300 font-bold rounded-xl text-lg transition-colors active:scale-95">🏆 명예의 전당 확인</button>
                 </div>
             </div>
         );
@@ -983,13 +1002,10 @@ function doGet(e) {
                 let q;
                 do { q = TIME_ATTACK_POOL[Math.floor(Math.random() * TIME_ATTACK_POOL.length)]; } while(q && prevName && q.name === prevName);
                 
-                // 오답 3개 섞기
                 const shuffledDistractors = [...q.distractors].sort(() => 0.5 - Math.random()).slice(0, 3);
-                // 정답 포함 4개 보기 섞기
                 const newChoices = [q.formula, ...shuffledDistractors].sort(() => 0.5 - Math.random());
                 
-                setCurrentQ(q);
-                setChoices(newChoices);
+                setCurrentQ(q); setChoices(newChoices);
             };
 
             const handleChoice = (selectedFormula) => {
@@ -1005,15 +1021,13 @@ function doGet(e) {
                     setIsSuccess(true); setTimeout(()=>setIsSuccess(false), 300);
                     getNewQ(currentQ.name);
                 } else {
-                    audio.error();
-                    setCombo(0);
+                    audio.error(); setCombo(0);
                     setIsShake(true); setTimeout(()=>setIsShake(false), 500);
                 }
             };
 
             return (
                 <div className="absolute inset-0 flex flex-col bg-[#12121c] p-4 md:p-8 overflow-hidden">
-                    {/* 상단 스탯 */}
                     <div className="flex justify-between items-center bg-dark-800 p-4 rounded-2xl border border-gray-700 mb-6 shrink-0">
                         <div className={`text-2xl md:text-4xl font-bold font-mono ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-neon-orange'}`}>
                             {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
@@ -1024,7 +1038,6 @@ function doGet(e) {
                         </div>
                     </div>
 
-                    {/* 문제 & 4지선다 영역 */}
                     <div className={`flex-1 flex flex-col justify-center items-center ${isShake ? 'animate-shake' : ''}`}>
                         <div className="text-neon-orange font-bold mb-4 tracking-widest text-sm md:text-base">TARGET MOLECULE</div>
                         <div className={`text-4xl md:text-6xl font-black mb-12 text-white transition-all ${isSuccess ? 'scale-110 text-neon-green text-glow-green' : ''}`}>
@@ -1084,7 +1097,7 @@ function doGet(e) {
 
             return (
                 <div className="absolute inset-0 flex flex-col p-4 md:p-8 bg-dark-900 overflow-y-auto">
-                    <div className="w-full max-w-lg mx-auto glass-panel rounded-3xl p-6 md:p-8 border-t-4 border-t-neon-yellow">
+                    <div className="w-full max-w-lg mx-auto glass-panel rounded-3xl p-6 md:p-8 border-t-4 border-t-neon-yellow shrink-0 mb-8">
                         <h2 className="text-3xl font-black text-white mb-6 text-center text-glow-yellow">🏆 명예의 전당</h2>
                         {loading ? (
                             <div className="flex flex-col items-center py-20 text-neon-yellow"><div className="w-12 h-12 border-4 border-gray-700 border-t-neon-yellow rounded-full animate-spin mb-4"></div><div>랭킹 데이터를 불러오는 중...</div></div>
@@ -1106,7 +1119,7 @@ function doGet(e) {
                                 ))}
                             </div>
                         )}
-                        <button onClick={()=>{audio.click(); onRestart();}} className="w-full py-5 bg-dark-800 border border-gray-600 hover:bg-dark-700 text-white font-bold rounded-xl active:scale-95 text-lg">다시 도전하기</button>
+                        <button onClick={()=>{audio.click(); onRestart();}} className="w-full py-5 bg-dark-800 border border-gray-600 hover:bg-dark-700 text-white font-bold rounded-xl active:scale-95 text-lg">메인으로 돌아가기</button>
                     </div>
                 </div>
             );
@@ -1124,7 +1137,7 @@ function doGet(e) {
 
             return (
                 <div className="flex-1 w-full h-full relative overflow-hidden">
-                    {view === 'intro' && <TimeAttackIntroView onStart={() => setView('game')} />}
+                    {view === 'intro' && <TimeAttackIntroView onStart={() => setView('game')} onViewLeaderboard={() => setView('leaderboard')} />}
                     {view === 'game' && <TimeAttackGameView onFinish={(s, mc) => { setGameResult({score:s, maxCombo:mc}); setView('submit'); }} />}
                     {view === 'submit' && <TimeAttackSubmitView score={gameResult.score} maxCombo={gameResult.maxCombo} onSubmit={submitData} setGlobalAlert={setGlobalAlert} />}
                     {view === 'leaderboard' && <TimeAttackLeaderboardView onRestart={()=>setView('intro')} setGlobalAlert={setGlobalAlert} />}
