@@ -182,20 +182,27 @@
             resize(w, h) { 
                 const dpr = window.devicePixelRatio || 1;
                 this.width = w; this.height = h; 
-                this.canvas.width = w * dpr; this.canvas.height = h * dpr; 
+                this.canvas.width = w * dpr; 
+                this.canvas.height = h * dpr; 
                 this.ctx.scale(dpr, dpr);
             }
             setupEvents() {
-                const start = (e) => { this.isDragging = true; this.prevMouse = { x: e.touches ? e.touches[0].clientX : e.clientX, y: e.touches ? e.touches[0].clientY : e.clientY }; };
+                const start = (e) => { 
+                    if(e.cancelable) e.preventDefault();
+                    this.isDragging = true; 
+                    this.prevMouse = { x: e.touches ? e.touches[0].clientX : e.clientX, y: e.touches ? e.touches[0].clientY : e.clientY }; 
+                };
                 const drag = (e) => {
                     if (!this.isDragging) return;
+                    if(e.cancelable) e.preventDefault();
                     const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY;
                     this.angleY += (cx - this.prevMouse.x) * 0.01; this.angleX += (cy - this.prevMouse.y) * 0.01;
                     this.prevMouse = { x: cx, y: cy };
                 };
-                const end = () => { this.isDragging = false; };
+                const end = (e) => { this.isDragging = false; };
+                
                 this.canvas.addEventListener('mousedown', start); this.canvas.addEventListener('mousemove', drag); window.addEventListener('mouseup', end);
-                this.canvas.addEventListener('touchstart', start, {passive: true}); this.canvas.addEventListener('touchmove', drag, {passive: true}); window.addEventListener('touchend', end);
+                this.canvas.addEventListener('touchstart', start, {passive: false}); this.canvas.addEventListener('touchmove', drag, {passive: false}); window.addEventListener('touchend', end);
                 this._e = {start, drag, end};
             }
             setMolecule(type) {
@@ -222,6 +229,7 @@
                 else if (type === 'Al2O3') { const o1=a(-1.2,0,0,'O'); const al1=a(-0.6,0.5,0,'Al'); const o2=a(0,0,0,'O'); const al2=a(0.6,-0.5,0,'Al'); const o3=a(1.2,0,0,'O'); b(o1,al1,2); b(al1,o2); b(o2,al2); b(al2,o3,2); }
                 else if (type === 'CuSO4') { const s=a(0,0,0,'S'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const cu=a(-1.6,1.6,-1.6,'Cu'); b(s,o1,2); b(s,o2,2); b(s,o3); b(s,o4); b(cu,o3); b(cu,o4); }
                 else if (type === 'KMnO4') { const mn=a(0,0,0,'Mn'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const k=a(-1.6,1.6,-1.6,'K'); b(mn,o1,2); b(mn,o2,2); b(mn,o3,2); b(mn,o4); b(k,o4); }
+                
                 this.angleX = Math.random() * Math.PI; this.angleY = Math.random() * Math.PI;
             }
             start() { if (!this.isAnimating) { this.isAnimating = true; this.animate(); } }
@@ -298,10 +306,12 @@
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
                 ctx.strokeStyle = this.type === 'number' ? '#00f3ff' : '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
                 ctx.fillStyle = this.textColor; ctx.font = this.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                // 조립기 카드는 직접 숫자를 맞춰보는 느낌을 위해 변환 없이 그대로 출력
                 ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
             }
-            isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
+            isPointInside(px, py) { 
+                const pad = 15; // 모바일 터치 인식 영역 대폭 확장
+                return px >= this.x - pad && px <= this.x + this.width + pad && py >= this.y - pad && py <= this.y + this.height + pad; 
+            }
             resetPosition() { this.x = this.originX; this.y = this.originY; }
         }
 
@@ -415,33 +425,50 @@
             getPos(e) {
                 const r = this.canvas.getBoundingClientRect(); let x = e.clientX, y = e.clientY;
                 if(e.touches && e.touches.length>0) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
+                else if(e.changedTouches && e.changedTouches.length>0) { x = e.changedTouches[0].clientX; y = e.changedTouches[0].clientY; }
                 return { x: x - r.left, y: y - r.top };
             }
 
             setupEvents() {
                 const onDown = (e) => {
-                    if (e.target !== this.canvas) return; e.preventDefault(); const pos = this.getPos(e);
-                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) {
+                    if (e.target !== this.canvas) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    const pos = this.getPos(e);
+                    const isTouch = e.touches && e.touches.length > 0;
+                    const pad = 15; // 버튼 터치 영역 보정
+                    
+                    if (pos.x >= this.btnSubmit.x - pad && pos.x <= this.btnSubmit.x+this.btnSubmit.w + pad && pos.y >= this.btnSubmit.y - pad && pos.y <= this.btnSubmit.y+this.btnSubmit.h + pad) {
                         this.checkAns(); return;
                     }
                     for (let i = 0; i < this.missionBtns.length; i++) {
                         let b = this.missionBtns[i];
-                        if (pos.x >= b.x && pos.x <= b.x+b.w && pos.y >= b.y && pos.y <= b.y+b.h) {
+                        if (pos.x >= b.x - pad && pos.x <= b.x+b.w + pad && pos.y >= b.y - pad && pos.y <= b.y+b.h + pad) {
                             audio.click(); this.currentMissionIndex = i; Storage.save('f_idx', i); this.loadMission(i); return;
                         }
                     }
                     for (let i = this.cards.length - 1; i >= 0; i--) {
                         let c = this.cards[i];
                         if (c.isPointInside(pos.x, pos.y)) {
-                            audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y};
+                            audio.click(); this.draggingCard = c; c.isDragging = true; 
+                            // 모바일: 손가락 가림 방지 (터치 시 위로 40px 이동)
+                            this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y + (isTouch ? 40 : 0)};
+                            
                             this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; });
                             this.cards.splice(i, 1); this.cards.push(c); break;
                         }
                     }
                 };
-                const onMove = (e) => { if(!this.draggingCard) return; e.preventDefault(); const p = this.getPos(e); this.draggingCard.x = p.x - this.dragOffset.x; this.draggingCard.y = p.y - this.dragOffset.y; };
+                const onMove = (e) => { 
+                    if(!this.draggingCard) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    const p = this.getPos(e); 
+                    this.draggingCard.x = p.x - this.dragOffset.x; 
+                    this.draggingCard.y = p.y - this.dragOffset.y; 
+                };
                 const onUp = (e) => {
-                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false;
+                    if(!this.draggingCard) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    this.draggingCard.isDragging = false;
                     let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
                     for (let s of this.currentSlots) {
                         if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; }
@@ -557,16 +584,38 @@
             }
             setupEvents() {
                 const onDown = (e) => {
-                    if (e.target !== this.canvas) return; e.preventDefault(); const pos = this.getPos(e);
-                    if (pos.x >= this.btnSubmit.x && pos.x <= this.btnSubmit.x+this.btnSubmit.w && pos.y >= this.btnSubmit.y && pos.y <= this.btnSubmit.y+this.btnSubmit.h) { this.synthesize(); return; }
+                    if (e.target !== this.canvas) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    const pos = this.getPos(e);
+                    const isTouch = e.touches && e.touches.length > 0;
+                    const pad = 15;
+                    
+                    if (pos.x >= this.btnSubmit.x - pad && pos.x <= this.btnSubmit.x+this.btnSubmit.w + pad && pos.y >= this.btnSubmit.y - pad && pos.y <= this.btnSubmit.y+this.btnSubmit.h + pad) { 
+                        this.synthesize(); return; 
+                    }
                     for (let i = this.cards.length - 1; i >= 0; i--) {
                         let c = this.cards[i];
-                        if (c.isPointInside(pos.x, pos.y)) { audio.click(); this.draggingCard = c; c.isDragging = true; this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y}; this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; }); this.cards.splice(i, 1); this.cards.push(c); break; }
+                        if (c.isPointInside(pos.x, pos.y)) { 
+                            audio.click(); this.draggingCard = c; c.isDragging = true; 
+                            let offsetOffsetY = isTouch ? 40 : 0;
+                            this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y + offsetOffsetY}; 
+                            this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; }); 
+                            this.cards.splice(i, 1); this.cards.push(c); break; 
+                        }
                     }
                 };
-                const onMove = (e) => { if(!this.draggingCard) return; e.preventDefault(); const p = this.getPos(e); this.draggingCard.x = p.x - this.dragOffset.x; this.draggingCard.y = p.y - this.dragOffset.y; };
+                const onMove = (e) => { 
+                    if(!this.draggingCard) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    const p = this.getPos(e); 
+                    this.draggingCard.x = p.x - this.dragOffset.x; 
+                    this.draggingCard.y = p.y - this.dragOffset.y; 
+                };
                 const onUp = (e) => {
-                    if(!this.draggingCard) return; e.preventDefault(); this.draggingCard.isDragging = false; let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    if(!this.draggingCard) return; 
+                    if(e.cancelable) e.preventDefault(); 
+                    this.draggingCard.isDragging = false; 
+                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
                     for (let s of this.currentSlots) { if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; } }
                     if (!drop) this.draggingCard.resetPosition(); this.draggingCard = null;
                 };
@@ -829,6 +878,7 @@ function doGet(e) {
             const currentLevel = ESCAPE_ROOM_LEVELS[levelIdx];
 
             useEffect(() => { timerRef.current = setInterval(() => { setElapsedTime(p => { const nt = p + 1; Storage.save('e_time', nt); return nt; }); }, 1000); return () => clearInterval(timerRef.current); }, []);
+
             useEffect(() => {
                 if (canvasRef.current && !rendererRef.current) {
                     rendererRef.current = new MoleculeVisualizer(canvasRef.current);
@@ -837,6 +887,7 @@ function doGet(e) {
                     return () => { window.removeEventListener('resize', handleResize); rendererRef.current.stop(); };
                 }
             }, []);
+
             useEffect(() => { setInputValue(""); setShowHint(false); if (rendererRef.current && !isSolved) { rendererRef.current.atoms = []; rendererRef.current.bonds = []; } }, [levelIdx, isSolved]);
 
             const handleSubmit = (e) => {
@@ -849,8 +900,11 @@ function doGet(e) {
 
             const handleNextLevel = () => {
                 audio.click();
-                if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); } 
-                else { clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); }
+                if (levelIdx < ESCAPE_ROOM_LEVELS.length - 1) { 
+                    setLevelIdx(p => { const nl = p + 1; Storage.save('e_level', nl); return nl; }); setIsSolved(false); 
+                } else { 
+                    clearInterval(timerRef.current); setStats(p => ({ ...p, escapeTime: elapsedTime })); onFinish(); 
+                }
             }
 
             return (
@@ -878,7 +932,9 @@ function doGet(e) {
                             <div className="absolute inset-0 z-30 flex flex-col items-center justify-between py-10 pointer-events-none">
                                 <div className="flex flex-col items-center px-4 text-center">
                                     <div className={`text-3xl md:text-5xl font-black mb-4 ${currentLevel.color} drop-shadow-[0_0_20px_currentColor]`}>ACCESS GRANTED</div>
-                                    <div className="text-gray-300 text-sm md:text-base font-bold bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-700">화면을 드래그하여 구조 관찰</div>
+                                    <div className="text-gray-300 text-sm md:text-base font-bold bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-700">
+                                        화면을 드래그하여 분자의 구조를 관찰하세요
+                                    </div>
                                 </div>
                                 <button onClick={handleNextLevel} className="pointer-events-auto mt-4 mx-4 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-2xl text-lg md:text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] transition-transform active:scale-95">
                                     {levelIdx < ESCAPE_ROOM_LEVELS.length - 1 ? '다음 구역으로 이동 ➔' : '방탈출 성공! 보고서 쓰기 ➔'}
@@ -972,7 +1028,11 @@ function doGet(e) {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.05)_0,transparent_50%)] pointer-events-none"></div>
                 <div className="glass-panel p-8 md:p-12 rounded-3xl text-center max-w-lg w-full z-10 border-t-4 border-t-neon-orange my-auto shrink-0">
                     <h1 className="text-3xl md:text-5xl font-black mb-4 text-glow-orange tracking-tight">코어 안정화<br/>타임어택</h1>
-                    <p className="text-gray-300 mb-8 leading-relaxed font-medium">제한시간 60초!<br/>등장하는 물질의 정확한 화학식을 선택하여<br/>콤보를 쌓고 명예의 전당에 이름을 올리세요.</p>
+                    <p className="text-gray-300 mb-8 leading-relaxed font-medium text-sm md:text-base">
+                        제한시간 60초! 등장하는 물질의 정확한 화학식을 선택하세요.<br/>
+                        <span className="text-neon-red font-bold">⚠️ 오답 시: 콤보 초기화, 50점 감점, 0.5초 조작 정지</span><br/>
+                        빠르고 신중한 판단으로 명예의 전당에 이름을 올리세요!
+                    </p>
                     <button onClick={()=>{audio.click(); onStart();}} className="w-full py-4 px-6 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 text-white font-bold rounded-xl text-xl shadow-[0_0_20px_rgba(255,140,0,0.4)] active:scale-95 mb-4">도전 시작하기</button>
                     <button onClick={()=>{audio.click(); onViewLeaderboard();}} className="w-full py-4 px-6 bg-dark-800 border border-gray-600 hover:bg-dark-700 text-gray-300 font-bold rounded-xl text-lg transition-colors active:scale-95">🏆 명예의 전당 확인</button>
                 </div>
@@ -989,6 +1049,10 @@ function doGet(e) {
             const [choices, setChoices] = useState([]);
             const [isShake, setIsShake] = useState(false);
             const [isSuccess, setIsSuccess] = useState(false);
+            
+            // 광클 방지 및 페널티용 상태 추가
+            const [isBlocked, setIsBlocked] = useState(false);
+            const [penaltyMsg, setPenaltyMsg] = useState("");
 
             useEffect(() => { getNewQ(null); }, []);
 
@@ -1009,7 +1073,7 @@ function doGet(e) {
             };
 
             const handleChoice = (selectedFormula) => {
-                if(!currentQ) return;
+                if(!currentQ || isShake || isSuccess) return; // 연속 터치(찍기) 완벽 차단
                 
                 if(selectedFormula === currentQ.formula) {
                     const newCombo = combo + 1; setCombo(newCombo);
@@ -1021,14 +1085,19 @@ function doGet(e) {
                     setIsSuccess(true); setTimeout(()=>setIsSuccess(false), 300);
                     getNewQ(currentQ.name);
                 } else {
-                    audio.error(); setCombo(0);
-                    setIsShake(true); setTimeout(()=>setIsShake(false), 500);
+                    audio.error(); 
+                    setCombo(0);
+                    setScore(p => Math.max(0, p - 50)); // 오답 시 50점 차감
+                    setIsShake(true); setTimeout(()=>setIsShake(false), 500); // 0.5초 조작 정지
                 }
             };
 
             return (
                 <div className="absolute inset-0 flex flex-col bg-[#12121c] p-4 md:p-8 overflow-hidden">
-                    <div className="flex justify-between items-center bg-dark-800 p-4 rounded-2xl border border-gray-700 mb-6 shrink-0">
+                    <div className="flex justify-between items-center bg-dark-800 p-4 rounded-2xl border border-gray-700 mb-6 shrink-0 relative">
+                        {/* 페널티 발생 시 뜨는 경고 텍스트 */}
+                        {penaltyMsg && <div className="absolute -bottom-8 left-4 text-neon-red font-black text-xl md:text-2xl animate-bounce text-glow-red">{penaltyMsg}</div>}
+                        
                         <div className={`text-2xl md:text-4xl font-bold font-mono ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-neon-orange'}`}>
                             {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
                         </div>
@@ -1044,12 +1113,21 @@ function doGet(e) {
                             {currentQ?.name}
                         </div>
                         
-                        <div className="w-full max-w-lg mx-auto grid grid-cols-2 gap-4 pb-8 px-2">
+                        <div className="w-full max-w-lg mx-auto grid grid-cols-2 gap-4 pb-8 px-2 relative">
+                            {/* 마비 상태일 때 버튼 덮는 시각적 에러 오버레이 */}
+                            {isBlocked && isShake && (
+                                <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                                    <span className="text-neon-red font-black text-xl md:text-2xl bg-black/80 px-6 py-3 rounded-full border border-neon-red backdrop-blur-sm tracking-widest">
+                                        SYSTEM ERROR...
+                                    </span>
+                                </div>
+                            )}
                             {choices.map((choice, i) => (
                                 <button
                                     key={i}
                                     onClick={() => handleChoice(choice)}
-                                    className="py-8 md:py-10 bg-dark-800 border-2 border-gray-600 hover:border-neon-orange hover:bg-dark-700 text-white font-sans text-3xl md:text-4xl font-bold rounded-2xl shadow-[0_4px_15px_rgba(0,0,0,0.3)] transition-transform active:scale-95 flex items-center justify-center tracking-wider"
+                                    disabled={isBlocked}
+                                    className={`py-8 md:py-10 border-2 text-white font-sans text-3xl md:text-4xl font-bold rounded-2xl shadow-[0_4px_15px_rgba(0,0,0,0.3)] transition-all flex items-center justify-center tracking-wider ${isBlocked && isShake ? 'bg-dark-900 border-red-900 opacity-50 cursor-not-allowed' : 'bg-dark-800 border-gray-600 hover:border-neon-orange hover:bg-dark-700 active:scale-95'}`}
                                 >
                                     {formatFormula(choice)}
                                 </button>
@@ -1173,21 +1251,21 @@ function doGet(e) {
                     <PinPadModal isOpen={pinModal.isOpen} targetTab={pinModal.target} correctPin={pinModal.code} onSuccess={handlePinSuccess} onClose={()=>setPinModal({isOpen:false, target:null, code:""})} />
                     
                     <header className="z-50 bg-dark-900 border-b border-gray-800 flex justify-between items-center px-2 md:px-6 h-14 shrink-0 overflow-x-auto whitespace-nowrap">
-                        <div className="flex gap-1 md:gap-4 font-bold text-xs md:text-base h-full">
-                            <button onClick={() => handleTabClick('formula')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'formula' ? 'text-neon-blue border-neon-blue drop-shadow-[0_0_8px_rgba(0,243,255,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                🧪 <span className="hidden sm:inline">화학식 </span>조립기
+                        <div className="flex gap-2 md:gap-4 font-bold text-sm md:text-base h-full">
+                            <button onClick={() => handleTabClick('formula')} className={`py-2 px-3 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'formula' ? 'text-neon-blue border-neon-blue drop-shadow-[0_0_8px_rgba(0,243,255,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                🧪 화학식 조립기
                             </button>
-                            <button onClick={() => handleTabClick('escape')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'escape' ? 'text-neon-green border-neon-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.escape ? '🔓' : '🔒'} 비밀 <span className="hidden sm:inline">연구소</span>
+                            <button onClick={() => handleTabClick('escape')} className={`py-2 px-3 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'escape' ? 'text-neon-green border-neon-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.escape ? '🔓' : '🔒'} 비밀 연구소
                             </button>
-                            <button onClick={() => handleTabClick('sandbox')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'sandbox' ? 'text-neon-purple border-neon-purple drop-shadow-[0_0_8px_rgba(181,55,242,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.sandbox ? '🔬' : '🔒'} 자유 <span className="hidden sm:inline">샌드박스</span>
+                            <button onClick={() => handleTabClick('sandbox')} className={`py-2 px-3 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'sandbox' ? 'text-neon-purple border-neon-purple drop-shadow-[0_0_8px_rgba(181,55,242,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.sandbox ? '🔬' : '🔒'} 자유 샌드박스
                             </button>
-                            <button onClick={() => handleTabClick('timeattack')} className={`py-2 px-2 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'timeattack' ? 'text-neon-orange border-neon-orange drop-shadow-[0_0_8px_rgba(255,140,0,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
-                                {unlockedTabs.timeattack ? '⏱️' : '🔒'} 타임<span className="hidden sm:inline">어택</span>
+                            <button onClick={() => handleTabClick('timeattack')} className={`py-2 px-3 transition-colors border-b-2 h-full flex items-center gap-1 ${activeTab === 'timeattack' ? 'text-neon-orange border-neon-orange drop-shadow-[0_0_8px_rgba(255,140,0,0.5)]' : 'text-gray-500 border-transparent hover:text-gray-300'}`}>
+                                {unlockedTabs.timeattack ? '⏱️' : '🔒'} 타임어택
                             </button>
                         </div>
-                        <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-2">⚙️</button>
+                        <button onClick={() => {audio.click(); setIsGuideOpen(true);}} className="text-gray-400 hover:text-white text-xl p-2 rounded-full hover:bg-gray-800 transition-colors ml-2 shrink-0">⚙️</button>
                     </header>
 
                     <main className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
