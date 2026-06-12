@@ -40,7 +40,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        body { background-color: #0a0a0f; color: #e2e8f0; overflow-x: hidden; overflow-y: auto; -webkit-user-select: none; user-select: none; touch-action: pan-y; }
+        body { background-color: #0a0a0f; color: #e2e8f0; overflow-x: hidden; -webkit-user-select: none; user-select: none; }
         .glass-panel { background: rgba(26, 26, 46, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0, 243, 255, 0.2); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); }
         .text-glow-blue { text-shadow: 0 0 10px rgba(0, 243, 255, 0.7), 0 0 20px rgba(0, 243, 255, 0.5); }
         .text-glow-red { text-shadow: 0 0 10px rgba(255, 0, 60, 0.7), 0 0 20px rgba(255, 0, 60, 0.5); }
@@ -182,8 +182,7 @@
             resize(w, h) { 
                 const dpr = window.devicePixelRatio || 1;
                 this.width = w; this.height = h; 
-                this.canvas.width = w * dpr; 
-                this.canvas.height = h * dpr; 
+                this.canvas.width = w * dpr; this.canvas.height = h * dpr; 
                 this.ctx.scale(dpr, dpr);
             }
             setupEvents() {
@@ -199,10 +198,11 @@
                     this.angleY += (cx - this.prevMouse.x) * 0.01; this.angleX += (cy - this.prevMouse.y) * 0.01;
                     this.prevMouse = { x: cx, y: cy };
                 };
-                const end = (e) => { this.isDragging = false; };
+                const end = () => { this.isDragging = false; };
                 
                 this.canvas.addEventListener('mousedown', start); this.canvas.addEventListener('mousemove', drag); window.addEventListener('mouseup', end);
                 this.canvas.addEventListener('touchstart', start, {passive: false}); this.canvas.addEventListener('touchmove', drag, {passive: false}); window.addEventListener('touchend', end);
+                this.canvas.addEventListener('touchcancel', end, {passive: false});
                 this._e = {start, drag, end};
             }
             setMolecule(type) {
@@ -229,7 +229,6 @@
                 else if (type === 'Al2O3') { const o1=a(-1.2,0,0,'O'); const al1=a(-0.6,0.5,0,'Al'); const o2=a(0,0,0,'O'); const al2=a(0.6,-0.5,0,'Al'); const o3=a(1.2,0,0,'O'); b(o1,al1,2); b(al1,o2); b(o2,al2); b(al2,o3,2); }
                 else if (type === 'CuSO4') { const s=a(0,0,0,'S'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const cu=a(-1.6,1.6,-1.6,'Cu'); b(s,o1,2); b(s,o2,2); b(s,o3); b(s,o4); b(cu,o3); b(cu,o4); }
                 else if (type === 'KMnO4') { const mn=a(0,0,0,'Mn'); const o1=a(0.8,0.8,0.8,'O'); const o2=a(-0.8,-0.8,0.8,'O'); const o3=a(-0.8,0.8,-0.8,'O'); const o4=a(0.8,-0.8,-0.8,'O'); const k=a(-1.6,1.6,-1.6,'K'); b(mn,o1,2); b(mn,o2,2); b(mn,o3,2); b(mn,o4); b(k,o4); }
-                
                 this.angleX = Math.random() * Math.PI; this.angleY = Math.random() * Math.PI;
             }
             start() { if (!this.isAnimating) { this.isAnimating = true; this.animate(); } }
@@ -238,6 +237,7 @@
                 if (this._e) {
                     this.canvas.removeEventListener('mousedown', this._e.start); this.canvas.removeEventListener('mousemove', this._e.drag); window.removeEventListener('mouseup', this._e.end);
                     this.canvas.removeEventListener('touchstart', this._e.start); this.canvas.removeEventListener('touchmove', this._e.drag); window.removeEventListener('touchend', this._e.end);
+                    this.canvas.removeEventListener('touchcancel', this._e.end);
                 }
             }
             animate() {
@@ -329,7 +329,10 @@
                 }
                 if (this.placedCard && !this.placedCard.isDragging) { this.placedCard.x = this.x; this.placedCard.y = this.y; this.placedCard.draw(ctx); }
             }
-            isPointInside(px, py) { return px >= this.x && px <= this.x + this.width && py >= this.y && py <= this.y + this.height; }
+            isPointInside(px, py) { 
+                const pad = 20; // 슬롯 드롭 판정 영역 확대
+                return px >= this.x - pad && px <= this.x + this.width + pad && py >= this.y - pad && py <= this.y + this.height + pad; 
+            }
         }
 
         class FormulaEngine {
@@ -450,8 +453,9 @@
                         let c = this.cards[i];
                         if (c.isPointInside(pos.x, pos.y)) {
                             audio.click(); this.draggingCard = c; c.isDragging = true; 
-                            // 모바일: 손가락 가림 방지 (터치 시 위로 40px 이동)
-                            this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y + (isTouch ? 40 : 0)};
+                            // 모바일: 손가락 가림 방지 오프셋 (터치 시 위로 40px 올림)
+                            const offsetOffsetY = isTouch ? 40 : 0;
+                            this.dragOffset = {x: pos.x - c.x, y: pos.y - c.y + offsetOffsetY};
                             
                             this.currentSlots.forEach(s => { if(s.placedCard === c) s.placedCard = null; });
                             this.cards.splice(i, 1); this.cards.push(c); break;
@@ -469,14 +473,25 @@
                     if(!this.draggingCard) return; 
                     if(e.cancelable) e.preventDefault(); 
                     this.draggingCard.isDragging = false;
-                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    let drop = false; 
+                    
+                    const isTouch = e.changedTouches && e.changedTouches.length > 0;
+                    const offsetOffsetY = isTouch ? 40 : 0;
+                    
+                    const cx = this.draggingCard.x + this.draggingCard.width/2; 
+                    // 드롭 판정 시 위로 올렸던 40px을 다시 더하여(내려서) 실제 포인터 위치 기준으로 판정
+                    const cy = this.draggingCard.y + this.draggingCard.height/2 + offsetOffsetY;
+                    
                     for (let s of this.currentSlots) {
-                        if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; }
+                        if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { 
+                            s.placedCard = this.draggingCard; drop = true; break; 
+                        }
                     }
                     if (!drop) this.draggingCard.resetPosition(); this.draggingCard = null;
                 };
                 this.canvas.addEventListener('mousedown', onDown); this.canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
                 this.canvas.addEventListener('touchstart', onDown, {passive: false}); this.canvas.addEventListener('touchmove', onMove, {passive: false}); window.addEventListener('touchend', onUp);
+                this.canvas.addEventListener('touchcancel', onUp, {passive: false});
                 this._e = {onDown, onMove, onUp, handleResize: this._e.handleResize};
             }
 
@@ -503,6 +518,7 @@
                 window.removeEventListener('resize', this._e.handleResize); window.removeEventListener('orientationchange', this._e.handleResize);
                 this.canvas.removeEventListener('mousedown', this._e.onDown); this.canvas.removeEventListener('mousemove', this._e.onMove); window.removeEventListener('mouseup', this._e.onUp);
                 this.canvas.removeEventListener('touchstart', this._e.onDown); this.canvas.removeEventListener('touchmove', this._e.onMove); window.removeEventListener('touchend', this._e.onUp);
+                this.canvas.removeEventListener('touchcancel', this._e.onUp);
             }
 
             renderLoop() {
@@ -615,12 +631,18 @@
                     if(!this.draggingCard) return; 
                     if(e.cancelable) e.preventDefault(); 
                     this.draggingCard.isDragging = false; 
-                    let drop = false; const cx = this.draggingCard.x + this.draggingCard.width/2; const cy = this.draggingCard.y + this.draggingCard.height/2;
+                    let drop = false; 
+                    const isTouch = e.changedTouches && e.changedTouches.length > 0;
+                    const offsetOffsetY = isTouch ? 40 : 0;
+                    const cx = this.draggingCard.x + this.draggingCard.width/2; 
+                    const cy = this.draggingCard.y + this.draggingCard.height/2 + offsetOffsetY;
+                    
                     for (let s of this.currentSlots) { if (!s.placedCard && s.type === this.draggingCard.type && s.isPointInside(cx, cy)) { s.placedCard = this.draggingCard; drop = true; break; } }
                     if (!drop) this.draggingCard.resetPosition(); this.draggingCard = null;
                 };
                 this.canvas.addEventListener('mousedown', onDown); this.canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
                 this.canvas.addEventListener('touchstart', onDown, {passive: false}); this.canvas.addEventListener('touchmove', onMove, {passive: false}); window.addEventListener('touchend', onUp);
+                this.canvas.addEventListener('touchcancel', onUp, {passive: false});
                 this._e = {onDown, onMove, onUp, handleResize: this._e.handleResize};
             }
             synthesize() {
@@ -946,7 +968,7 @@ function doGet(e) {
             );
         };
 
-        const EscapeReportView = ({ onSubmit, escapeTime, setGlobalAlert }) => {
+        const EscapeReportView = ({ onSubmit, escapeTime, setGlobalAlert, isSubmitting }) => {
             const [form, setForm] = useState({ studentId: '', studentName: '', insight: '' });
             const [quizzes, setQuizzes] = useState([]); const [answers, setAnswers] = useState([null, null, null]); const [showResults, setShowResults] = useState(false);
             
@@ -954,6 +976,7 @@ function doGet(e) {
             const handleAnswer = (idx, val) => { if(!showResults) { audio.click(); const newAns = [...answers]; newAns[idx] = val; setAnswers(newAns); } };
 
             const handleSubmit = () => {
+                if (isSubmitting) return;
                 if (!form.studentId.trim() || !form.studentName.trim() || !form.insight.trim()) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "모든 항목을 입력해주세요." }); }
                 if (answers.includes(null)) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "퀴즈를 모두 풀어주세요." }); }
                 if (!showResults) { audio.success(); setShowResults(true); } else { audio.click(); onSubmit({ ...form, quizScore: Math.round(answers.reduce((acc, ans, idx) => acc + (ans === quizzes[idx].a ? 1 : 0), 0) * 33.3) }); }
@@ -985,7 +1008,9 @@ function doGet(e) {
                                     ))}
                                 </div>
                                 <textarea placeholder="오늘 연구소를 탈출하며 알게 된 점을 적어주세요." className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 h-32 resize-none focus:border-cyan-500 outline-none text-lg" value={form.insight} onChange={e => setForm({...form, insight: e.target.value})} disabled={showResults}></textarea>
-                                <button onClick={handleSubmit} className="w-full py-5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-xl text-xl shadow-[0_0_15px_rgba(0,243,255,0.4)] active:scale-95 transition-transform">{showResults ? '서버로 최종 제출 ➔' : '채점 결과 확인하기'}</button>
+                                <button onClick={handleSubmit} disabled={isSubmitting} className={`w-full py-5 text-white font-bold rounded-xl text-xl transition-transform ${isSubmitting ? 'bg-gray-600 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-blue-600 shadow-[0_0_15px_rgba(0,243,255,0.4)] active:scale-95'}`}>
+                                    {showResults ? (isSubmitting ? '전송 중...' : '서버로 최종 제출 ➔') : '채점 결과 확인하기'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1005,18 +1030,23 @@ function doGet(e) {
 
         const EscapeRoomFlow = ({ setGlobalAlert }) => {
             const [view, setView] = useState('intro'); const [stats, setStats] = useState({ escapeTime: 0 });
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            
             const submitData = async (formData) => {
+                if (isSubmitting) return;
                 if (!GOOGLE_SCRIPT_URL) return setGlobalAlert({ isOpen: true, msg: "DB 연동 오류! GOOGLE_SCRIPT_URL을 설정하세요." });
+                setIsSubmitting(true);
                 try {
                     await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, escapeTime: stats.escapeTime, timestamp: new Date().toLocaleString(), type: 'escape' }) });
                     Storage.save('e_level', 0); Storage.save('e_time', 0); setView('done');
                 } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); }
+                finally { setIsSubmitting(false); }
             };
             return (
                 <div className="flex-1 w-full h-full relative">
                     {view === 'intro' && <EscapeIntroView onStart={() => setView('simulation')} />}
                     {view === 'simulation' && <EscapeSimulationView onFinish={() => setView('report')} stats={stats} setStats={setStats} />}
-                    {view === 'report' && <EscapeReportView onSubmit={submitData} escapeTime={stats.escapeTime} setGlobalAlert={setGlobalAlert} />}
+                    {view === 'report' && <EscapeReportView onSubmit={submitData} escapeTime={stats.escapeTime} setGlobalAlert={setGlobalAlert} isSubmitting={isSubmitting} />}
                     {view === 'done' && <EscapeDoneView onRestart={() => setView('intro')} />}
                 </div>
             );
@@ -1073,7 +1103,7 @@ function doGet(e) {
             };
 
             const handleChoice = (selectedFormula) => {
-                if(!currentQ || isShake || isSuccess) return; // 연속 터치(찍기) 완벽 차단
+                if(!currentQ || isShake || isSuccess || isBlocked) return; 
                 
                 if(selectedFormula === currentQ.formula) {
                     const newCombo = combo + 1; setCombo(newCombo);
@@ -1088,14 +1118,14 @@ function doGet(e) {
                     audio.error(); 
                     setCombo(0);
                     setScore(p => Math.max(0, p - 50)); // 오답 시 50점 차감
-                    setIsShake(true); setTimeout(()=>setIsShake(false), 500); // 0.5초 조작 정지
+                    setIsBlocked(true); setIsShake(true); 
+                    setTimeout(()=> { setIsShake(false); setIsBlocked(false); }, 500); 
                 }
             };
 
             return (
                 <div className="absolute inset-0 flex flex-col bg-[#12121c] p-4 md:p-8 overflow-hidden">
                     <div className="flex justify-between items-center bg-dark-800 p-4 rounded-2xl border border-gray-700 mb-6 shrink-0 relative">
-                        {/* 페널티 발생 시 뜨는 경고 텍스트 */}
                         {penaltyMsg && <div className="absolute -bottom-8 left-4 text-neon-red font-black text-xl md:text-2xl animate-bounce text-glow-red">{penaltyMsg}</div>}
                         
                         <div className={`text-2xl md:text-4xl font-bold font-mono ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-neon-orange'}`}>
@@ -1114,7 +1144,6 @@ function doGet(e) {
                         </div>
                         
                         <div className="w-full max-w-lg mx-auto grid grid-cols-2 gap-4 pb-8 px-2 relative">
-                            {/* 마비 상태일 때 버튼 덮는 시각적 에러 오버레이 */}
                             {isBlocked && isShake && (
                                 <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                                     <span className="text-neon-red font-black text-xl md:text-2xl bg-black/80 px-6 py-3 rounded-full border border-neon-red backdrop-blur-sm tracking-widest">
@@ -1138,9 +1167,10 @@ function doGet(e) {
             );
         };
 
-        const TimeAttackSubmitView = ({ score, maxCombo, onSubmit, setGlobalAlert }) => {
+        const TimeAttackSubmitView = ({ score, maxCombo, onSubmit, setGlobalAlert, isSubmitting }) => {
             const [form, setForm] = useState({ studentId: '', studentName: '' });
             const handleSubmit = () => {
+                if (isSubmitting) return;
                 if (!form.studentId.trim() || !form.studentName.trim()) { audio.error(); return setGlobalAlert({ isOpen: true, msg: "학번과 이름을 입력해주세요." }); }
                 audio.success();
                 onSubmit({ ...form, score, maxCombo });
@@ -1153,10 +1183,12 @@ function doGet(e) {
                         <div className="text-gray-400 mb-8 font-mono">MAX COMBO: {maxCombo}</div>
                         
                         <div className="space-y-4 mb-8">
-                            <input type="text" placeholder="학번" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} />
-                            <input type="text" placeholder="이름" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} />
+                            <input type="text" placeholder="학번" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentId} onChange={e => setForm({...form, studentId: e.target.value})} disabled={isSubmitting} />
+                            <input type="text" placeholder="이름" className="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 focus:border-neon-orange outline-none text-center text-lg" value={form.studentName} onChange={e => setForm({...form, studentName: e.target.value})} disabled={isSubmitting} />
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-5 bg-gradient-to-r from-orange-600 to-red-600 text-white font-black rounded-xl text-xl active:scale-95 shadow-[0_0_15px_rgba(255,140,0,0.4)]">랭킹에 등록하기</button>
+                        <button onClick={handleSubmit} disabled={isSubmitting} className={`w-full py-5 text-white font-black rounded-xl text-xl transition-transform ${isSubmitting ? 'bg-gray-600 cursor-not-allowed' : 'bg-gradient-to-r from-orange-600 to-red-600 active:scale-95 shadow-[0_0_15px_rgba(255,140,0,0.4)]'}`}>
+                            {isSubmitting ? '등록 중...' : '랭킹에 등록하기'}
+                        </button>
                     </div>
                 </div>
             );
@@ -1205,19 +1237,24 @@ function doGet(e) {
 
         const TimeAttackFlow = ({ setGlobalAlert }) => {
             const [view, setView] = useState('intro'); const [gameResult, setGameResult] = useState({score:0, maxCombo:0});
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
             const submitData = async (formData) => {
+                if (isSubmitting) return;
                 if (!GOOGLE_SCRIPT_URL) { setView('leaderboard'); return setGlobalAlert({ isOpen: true, msg: "DB URL이 설정되지 않아 랭킹을 불러올 수 없습니다."}); }
+                setIsSubmitting(true);
                 try {
                     await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...formData, timestamp: new Date().toLocaleString(), type: 'timeattack' }) });
                     setView('leaderboard');
                 } catch (error) { setGlobalAlert({ isOpen: true, msg: "네트워크 오류 발생" }); setView('leaderboard'); }
+                finally { setIsSubmitting(false); }
             };
 
             return (
                 <div className="flex-1 w-full h-full relative overflow-hidden">
                     {view === 'intro' && <TimeAttackIntroView onStart={() => setView('game')} onViewLeaderboard={() => setView('leaderboard')} />}
                     {view === 'game' && <TimeAttackGameView onFinish={(s, mc) => { setGameResult({score:s, maxCombo:mc}); setView('submit'); }} />}
-                    {view === 'submit' && <TimeAttackSubmitView score={gameResult.score} maxCombo={gameResult.maxCombo} onSubmit={submitData} setGlobalAlert={setGlobalAlert} />}
+                    {view === 'submit' && <TimeAttackSubmitView score={gameResult.score} maxCombo={gameResult.maxCombo} onSubmit={submitData} setGlobalAlert={setGlobalAlert} isSubmitting={isSubmitting} />}
                     {view === 'leaderboard' && <TimeAttackLeaderboardView onRestart={()=>setView('intro')} setGlobalAlert={setGlobalAlert} />}
                 </div>
             );
@@ -1245,7 +1282,7 @@ function doGet(e) {
             };
 
             return (
-                <div className="h-screen flex flex-col font-sans relative overflow-hidden bg-dark-900">
+                <div className="h-[100dvh] flex flex-col font-sans relative overflow-hidden bg-dark-900">
                     <CustomAlert isOpen={alertData.isOpen} message={alertData.msg} onClose={() => setAlertData({isOpen: false, msg: ""})} />
                     <AdminGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
                     <PinPadModal isOpen={pinModal.isOpen} targetTab={pinModal.target} correctPin={pinModal.code} onSuccess={handlePinSuccess} onClose={()=>setPinModal({isOpen:false, target:null, code:""})} />
